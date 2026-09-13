@@ -1,0 +1,908 @@
+const pptxgen = require("pptxgenjs");
+const fs = require("fs"), path = require("path");
+
+const PX = path.join(__dirname, "sprites");
+const cache = {};
+function img(name) {
+  if (!cache[name]) cache[name] = "image/png;base64," + fs.readFileSync(path.join(PX, name + ".png")).toString("base64");
+  return cache[name];
+}
+
+/* ── 팔레트 ───────────────────────────────────────────────────────
+   크롬(UI)은 네온, 차트 계열색은 검증 통과한 별도 세트를 쓴다.      */
+const BG = "0D1018", PANEL = "171E30", PANEL2 = "1F2740", PANEL3 = "111726";
+const INK = "E8ECF5", MUT = "93A2C0", DIM = "5E6B87";
+const EDGE = "2E3A5C";
+const GRN = "3DFA7E", CYN = "35D6ED", AMB = "FFB627", MAG = "FF4D6D",
+      PUR = "9D7BFF", GLD = "FFD34E", ORG = "FF7847", BLU = "4FC3F7";
+// 검증 통과 (dark surface · 6검사 PASS)
+const C1 = "26A455", C2 = "2596B0", C3 = "C98416", C4 = "C93B54";
+
+const F = "Malgun Gothic", FM = "Courier New";
+const W = 13.333, H = 7.5, M = 0.6, CW = W - M * 2;
+
+const pres = new pptxgen();
+pres.layout = "LAYOUT_WIDE";
+pres.title = "Stock Agent v2 — 살아있는 리서치 데스크";
+
+function slide() { const s = pres.addSlide(); s.background = { color: BG }; return s; }
+
+/* 하드 오프셋 그림자를 가진 픽셀 패널 (둥근 모서리 없음) */
+function panel(s, o) {
+  const off = o.off === undefined ? 0.055 : o.off;
+  if (off > 0) s.addShape(pres.ShapeType.rect, {
+    x: o.x + off, y: o.y + off, w: o.w, h: o.h,
+    fill: { color: o.shadow || "070A12" }, line: { type: "none" },
+  });
+  s.addShape(pres.ShapeType.rect, {
+    x: o.x, y: o.y, w: o.w, h: o.h,
+    fill: { color: o.fill || PANEL },
+    line: o.line === null ? { type: "none" } : { color: o.line || EDGE, width: 1.25 },
+  });
+}
+function txt(s, t, o) { s.addText(t, Object.assign({ isTextBox: true, margin: 0, fontFace: F }, o)); }
+function mono(s, t, o) { s.addText(t, Object.assign({ isTextBox: true, margin: 0, fontFace: FM }, o)); }
+
+function header(s, kicker, title, sub) {
+  mono(s, "▚ " + kicker, { x: M, y: 0.40, w: CW, h: 0.26, fontSize: 11, bold: true, color: AMB, charSpacing: 1.5 });
+  txt(s, title, { x: M, y: 0.68, w: CW, h: 0.60, fontSize: 28, bold: true, color: INK, valign: "top" });
+  if (sub) txt(s, sub, { x: M, y: 1.30, w: CW, h: 0.30, fontSize: 12.5, color: MUT });
+}
+function foot(s, t) { mono(s, t, { x: M, y: H - 0.42, w: CW, h: 0.24, fontSize: 9, color: DIM }); }
+
+/* 픽셀 바닥 타일 한 줄 */
+function floorRow(s, x, y, w, tile, c1, c2) {
+  const n = Math.floor(w / tile);
+  for (let i = 0; i < n; i++) s.addShape(pres.ShapeType.rect, {
+    x: x + i * tile, y, w: tile, h: tile,
+    fill: { color: i % 2 ? c2 : c1 }, line: { type: "none" },
+  });
+}
+/* 픽셀 진행 막대 */
+function pxBar(s, x, y, w, h, frac, on, off) {
+  const cells = 20, cw = w / cells, lit = Math.round(cells * frac);
+  for (let i = 0; i < cells; i++) s.addShape(pres.ShapeType.rect, {
+    x: x + i * cw + 0.012, y, w: cw - 0.024, h,
+    fill: { color: i < lit ? on : (off || "232B44") }, line: { type: "none" },
+  });
+}
+
+/* ═══════════ 1. TITLE — 픽셀 트레이딩 플로어 ═══════════ */
+{
+  const s = slide();
+  // 스캔라인
+  for (let i = 0; i < 42; i++) s.addShape(pres.ShapeType.rect, {
+    x: 0, y: i * 0.18, w: W, h: 0.03, fill: { color: "121826" }, line: { type: "none" },
+  });
+
+  mono(s, "STOCK_AGENT v2.0  ·  INTERNAL  ·  NOT INVESTMENT ADVICE", {
+    x: M, y: 0.52, w: 10, h: 0.26, fontSize: 11, bold: true, color: AMB, charSpacing: 1,
+  });
+
+  txt(s, "살아있는 리서치 데스크", {
+    x: M, y: 1.28, w: 11.4, h: 0.86, fontSize: 46, bold: true, color: INK,
+  });
+  mono(s, "논문이 흐르고, 에이전트가 소집된다", {
+    x: M, y: 2.16, w: 11.4, h: 0.42, fontSize: 20, bold: true, color: GRN,
+  });
+  txt(s, "고정된 12편과 고정된 8데스크를 버린다. 논문은 매주 새로 들어와 재현 검사를 통과한 것만 살아남고,\n에이전트는 이벤트가 뜰 때만 소집됐다가 봉투를 내고 사라진다.", {
+    x: M, y: 2.68, w: 11.4, h: 0.66, fontSize: 13, color: MUT, lineSpacing: 20,
+  });
+
+  // 에이전트 8기 + 바닥
+  const sprites = ["ag_equity", "ag_quant", "ag_macro", "ag_exec", "ag_risk", "ag_compliance", "ag_dataops", "ag_chair"];
+  const labels = ["기업분석", "계량", "매크로", "집행", "리스크", "준법", "데이터", "간사"];
+  const sw = 0.82, gap = 0.62;
+  const totalW = sprites.length * sw + (sprites.length - 1) * (gap - sw);
+  sprites.forEach((sp, i) => {
+    const x = M + i * gap;
+    s.addImage({ data: img(sp), x, y: 4.02, w: sw, h: sw });
+    mono(s, labels[i], { x: x - 0.12, y: 5.04, w: sw + 0.24, h: 0.22, fontSize: 8.5, color: DIM, align: "center" });
+  });
+  floorRow(s, M - 0.02, 4.84, 5.16, 0.129, "1B2338", "141B2C");
+
+  const chips = [["N", "살아있는 논문", "고정 12편이 아니다"], ["EVENT", "소집 방식", "전수 스캔이 아니다"],
+                 ["7", "발행 게이트", "재현 관문 신설"], ["0", "원장 쓰기 권한", "에이전트는 못 쓴다"]];
+  chips.forEach((c, i) => {
+    const x = M + i * 3.06;
+    panel(s, { x, y: 5.42, w: 2.86, h: 1.06, fill: PANEL, line: EDGE });
+    mono(s, c[0], { x: x + 0.16, y: 5.54, w: 2.5, h: 0.34, fontSize: 21, bold: true, color: GLD });
+    txt(s, c[1], { x: x + 0.16, y: 5.90, w: 2.5, h: 0.24, fontSize: 11, bold: true, color: INK });
+    txt(s, c[2], { x: x + 0.16, y: 6.14, w: 2.5, h: 0.22, fontSize: 9.5, color: MUT });
+  });
+  mono(s, "2026-09-13  ·  InnbumBaek/Stock_Agent  ·  최종 결정은 사람이 한다", {
+    x: M, y: 6.72, w: 11.5, h: 0.26, fontSize: 9.5, color: DIM,
+  });
+}
+
+/* ═══════════ 2. v1 → v2 ═══════════ */
+{
+  const s = slide();
+  header(s, "WHAT CHANGES", "v1 은 조직도였다. v2 는 흐름이다.",
+         "구조는 그대로 둔다 — 원장은 여전히 사실만 담고, 판단은 여전히 사람이 한다. 바뀌는 것은 논문과 에이전트의 수명이다.");
+
+  const rows = [
+    ["논문", "채택본 12편 고정 · 손으로 고른 목록", "매주 수확 → 재현 검사 → 통과분만 채택 · 반감기 지나면 은퇴", true],
+    ["근거", "논문을 인용한다", "논문을 우리 원장에서 재현해 보고 인용한다", true],
+    ["에이전트", "상설 8데스크 · 매일 전수 실행", "상설 3 + 이벤트 소집 N · 변동분만 실행", true],
+    ["수명", "계속 떠 있다", "spawn → 봉투 → dissolve · 상태를 들고 있지 않는다", true],
+    ["비용", "종목수 × 데스크수 (선형 증가)", "이벤트 수에 비례 (실측 기준 1/5~1/8)", true],
+    ["게이트", "6개", "7개 — 재현 관문 추가", true],
+  ];
+  const hy = 1.80;
+  panel(s, { x: M, y: hy, w: CW, h: 0.44, fill: PANEL2, line: EDGE });
+  mono(s, "항목", { x: M + 0.2, y: hy, w: 1.5, h: 0.44, fontSize: 10.5, bold: true, color: MUT, valign: "middle" });
+  mono(s, "v1  (지난 방안)", { x: M + 1.9, w: 4.3, y: hy, h: 0.44, fontSize: 10.5, bold: true, color: MAG, valign: "middle" });
+  mono(s, "v2  (이번 방안)", { x: M + 6.6, w: 5.3, y: hy, h: 0.44, fontSize: 10.5, bold: true, color: GRN, valign: "middle" });
+  rows.forEach((r, i) => {
+    const y = hy + 0.56 + i * 0.71;
+    panel(s, { x: M, y, w: CW, h: 0.62, fill: i % 2 ? PANEL3 : PANEL, line: EDGE, off: 0 });
+    mono(s, r[0], { x: M + 0.2, y, w: 1.6, h: 0.62, fontSize: 11.5, bold: true, color: AMB, valign: "middle" });
+    txt(s, r[1], { x: M + 1.9, y, w: 4.4, h: 0.62, fontSize: 11, color: DIM, valign: "middle" });
+    s.addImage({ data: img("ar_gr"), x: M + 6.16, y: y + 0.19, w: 0.34, h: 0.21 });
+    txt(s, r[2], { x: M + 6.6, y, w: 5.4, h: 0.62, fontSize: 11, color: INK, valign: "middle" });
+  });
+  foot(s, "// 깨지 않는 것: 재기만 하고 판단하지 않는다 · 원장에는 사실만 · 없는 값을 만들지 않는다 · 등급을 섞지 않는다 · 키는 저장소 밖");
+}
+
+/* ═══════════ 3. 문제 — 12편은 스냅샷이다 ═══════════ */
+{
+  const s = slide();
+  header(s, "PROBLEM", "12편은 목록이 아니라 스냅샷이다",
+         ".papers.json 의 verified 는 2026-09-05 다. 그날 이후로 이 데스크의 방법론은 멈춰 있다.");
+
+  panel(s, { x: M, y: 1.86, w: 6.0, h: 4.56, fill: PANEL, line: EDGE });
+  mono(s, "adopted = 12   ·   frozen @ 2026-09-05", {
+    x: M + 0.24, y: 2.04, w: 5.5, h: 0.26, fontSize: 11, bold: true, color: MAG,
+  });
+  const papers = ["roll1984", "j1990", "ritter1991", "jt1993", "dnr1998", "ac2000",
+                  "fh2001", "amihud2002", "gh2004", "athl2005", "ahxz2006", "cs2012"];
+  papers.forEach((p, i) => {
+    const x = M + 0.26 + (i % 4) * 1.42, y = 2.52 + Math.floor(i / 4) * 1.02;
+    s.addImage({ data: img("ob_paper"), x, y, w: 0.34, h: 0.34, transparency: 45 });
+    mono(s, p, { x: x + 0.40, y: y + 0.05, w: 1.0, h: 0.24, fontSize: 8.5, color: DIM });
+    mono(s, String(parseInt(p.replace(/\D/g, "").slice(-4))), {
+      x: x + 0.40, y: y + 0.26, w: 1.0, h: 0.2, fontSize: 8, color: "3F4A63" });
+  });
+  mono(s, "최신 채택본이 2012년이다 — 14년치 계량금융이 비어 있다", {
+    x: M + 0.26, y: 5.36, w: 5.5, h: 0.3, fontSize: 10.5, bold: true, color: AMB,
+  });
+  txt(s, "그 사이 시장미시구조·집행비용 연구가 가장 많이 쌓인 구간이다. 훑지 않아서 없는 것이지, 없어서 없는 것이 아니다.", {
+    x: M + 0.26, y: 5.68, w: 5.5, h: 0.5, fontSize: 10, color: MUT });
+
+  const probs = [
+    ["손으로 고른 목록은 고른 날짜에서 멈춘다", "누가 언제 다시 훑을지가 정해져 있지 않으면, 갱신은 사실상 일어나지 않는다.", MAG],
+    ["인용은 검증이 아니다", "논문이 미국 대형주에서 보인 효과가 코스닥 소형주에서 성립하는지는 아무도 확인하지 않았다.", ORG],
+    ["틀린 채로 계속 쓰인다", "채택본에 은퇴 개념이 없다. 뒤집힌 결과도 목록에 남아 계속 인용된다.", AMB],
+  ];
+  probs.forEach((p, i) => {
+    const y = 1.86 + i * 1.13;
+    panel(s, { x: 6.86, y, w: 5.87, h: 1.02, fill: PANEL, line: EDGE });
+    s.addImage({ data: img("ic_no"), x: 7.06, y: y + 0.15, w: 0.22, h: 0.22 });
+    txt(s, p[0], { x: 7.40, y: y + 0.12, w: 5.15, h: 0.28, fontSize: 12.5, bold: true, color: p[2] });
+    txt(s, p[1], { x: 7.40, y: y + 0.42, w: 5.15, h: 0.5, fontSize: 10, color: MUT });
+  });
+  panel(s, { x: 6.86, y: 5.28, w: 5.87, h: 1.14, fill: "16281C", line: "2A5A3A" });
+  s.addImage({ data: img("ic_spark"), x: 7.06, y: 5.46, w: 0.24, h: 0.24 });
+  txt(s, "그래서 편수를 세지 않는다", { x: 7.40, y: 5.42, w: 5.15, h: 0.3, fontSize: 13, bold: true, color: GRN });
+  txt(s, "\"몇 편 있는가\"가 아니라 \"몇 편이 아직 살아있는가\"를 센다. 채택은 상태이지 영구 자격이 아니다.", {
+    x: 7.40, y: 5.74, w: 5.15, h: 0.56, fontSize: 10.5, color: INK });
+  foot(s, "// 근거: stock-monitor/.papers.json — schema ki.papers/1 · verified 2026-09-05 · adopted 12");
+}
+
+/* ═══════════ 4. 논문 파이프라인 5단계 ═══════════ */
+{
+  const s = slide();
+  header(s, "PAPER PIPELINE", "논문은 다섯 관문을 지나야 인용된다",
+         "수확은 이미 있다(fetch_papers.py). 새로 넣는 것은 세 번째 — 재현 관문이다.");
+
+  const stages = [
+    ["01", "수확", "HARVEST", "arXiv q-fin 8분류\nSemantic Scholar\nOpenAlex · Crossref", "주 ~400건", CYN],
+    ["02", "심사", "SCREEN", "초록으로 네 질문 중\n하나를 바꾸는가 판정\n프리프린트 등급 표시", "주 ~40건", BLU],
+    ["03", "재현", "REPLICATE", "우리 원장 일봉에서\n그 팩터를 실제로 계산\n방향·유의성 대조", "주 ~6건", GRN],
+    ["04", "채택", "ADOPT", "Crossref 발행정보 재대조\nlimits 작성 필수\n하루 최대 1편", "주 ~2건", AMB],
+    ["05", "감가", "DECAY", "반감기마다 재현 재검\n누적 실패 시 은퇴\n인용 절에 경고", "상시", MAG],
+  ];
+  const sw = 2.36, sg = 0.13;
+  stages.forEach((st, i) => {
+    const x = M + i * (sw + sg);
+    panel(s, { x, y: 1.86, w: sw, h: 0.52, fill: st[5], line: null });
+    mono(s, st[0] + "  " + st[2], { x: x + 0.12, y: 1.86, w: sw - 0.24, h: 0.52, fontSize: 10.5, bold: true, color: "0D1018", valign: "middle" });
+    panel(s, { x, y: 2.46, w: sw, h: 2.72, fill: PANEL, line: EDGE });
+    txt(s, st[1], { x: x + 0.16, y: 2.62, w: sw - 0.32, h: 0.36, fontSize: 19, bold: true, color: st[5] });
+    txt(s, st[3], { x: x + 0.16, y: 3.06, w: sw - 0.32, h: 1.1, fontSize: 10.5, color: INK, lineSpacing: 16 });
+    panel(s, { x: x + 0.16, y: 4.42, w: sw - 0.32, h: 0.36, fill: PANEL2, line: null, off: 0 });
+    mono(s, st[4], { x: x + 0.16, y: 4.42, w: sw - 0.32, h: 0.36, fontSize: 10, bold: true, color: MUT, align: "center", valign: "middle" });
+    if (i < 4) s.addImage({ data: img("ar_am"), x: x + sw - 0.06, y: 3.52, w: 0.3, h: 0.19 });
+  });
+
+  // 깔때기
+  panel(s, { x: M, y: 5.38, w: CW, h: 1.02, fill: PANEL3, line: EDGE });
+  txt(s, "깔때기가 좁은 것이 정상이다", { x: M + 0.24, y: 5.5, w: 4.0, h: 0.28, fontSize: 12.5, bold: true, color: GLD });
+  txt(s, "주 400건을 훑어 2건이 남는다. 훑는 양을 늘리는 것이 목적이 아니라, 남는 2건이 코스닥에서 실제로 성립하는 것이 목적이다.", {
+    x: M + 0.24, y: 5.80, w: 7.4, h: 0.46, fontSize: 10.5, color: MUT });
+  const fr = [["400", CYN], ["40", BLU], ["6", GRN], ["2", AMB]];
+  fr.forEach((f, i) => {
+    const x = 8.5 + i * 1.08;
+    mono(s, f[0], { x, y: 5.52, w: 0.9, h: 0.42, fontSize: 22, bold: true, color: f[1], align: "center" });
+    if (i < 3) mono(s, "▸", { x: x + 0.72, y: 5.58, w: 0.34, h: 0.3, fontSize: 13, color: DIM, align: "center" });
+    mono(s, ["수확", "심사", "재현", "채택"][i], { x, y: 5.98, w: 0.9, h: 0.24, fontSize: 9, color: DIM, align: "center" });
+  });
+  foot(s, "// 수확 4곳은 이미 구현돼 있다 (docs/fetch_papers.py --harvest/--adopt/--verify) · 03 재현과 05 감가가 신설분");
+}
+
+/* ═══════════ 5. 재현 관문 (하이라이트) ═══════════ */
+{
+  const s = slide();
+  header(s, "★ REPLICATION GATE", "재현 관문 — 인용하기 전에 우리 데이터로 계산해 본다",
+         "이 데스크가 다루는 것은 코스닥 소형주다. 논문 표본이 미국 대형주라면, 그 결론은 가설이지 근거가 아니다.");
+
+  const steps = [
+    ["논문에서 검정 가능한 주장 하나를 뽑는다", "\"거래량이 낮을수록 이후 수익률이 높다\" 처럼 방향이 있는 한 문장으로 환원한다. 환원되지 않으면 재현 대상이 아니다."],
+    ["원장에서 그 팩터를 계산한다", "ki.sqlite 일봉으로 팩터를 만든다. 새 데이터를 받지 않는다 — 이미 KRX 공식 API 로 받아 둔 것만 쓴다."],
+    ["코스닥 전종목에 적용해 방향을 본다", "분위 포트폴리오 스프레드의 부호가 논문과 같은가. 표본이 부족하면 계산을 거부한다(기존 원칙 그대로)."],
+    ["세 가지 중 하나로 판정한다", "재현됨 / 방향 반대 / 판정 불가. 재현되지 않아도 지우지 않고 결과를 남긴다."],
+    ["재현된 것만 채택본으로 넘긴다", "판정 결과와 표본 구간이 논문 항목에 함께 저장돼, 리포트에 인용될 때 같이 따라 나간다."],
+  ];
+  steps.forEach((st, i) => {
+    const y = 1.84 + i * 0.86;
+    panel(s, { x: M, y, w: 6.5, h: 0.76, fill: PANEL, line: EDGE });
+    s.addShape(pres.ShapeType.rect, { x: M + 0.14, y: y + 0.16, w: 0.44, h: 0.44, fill: { color: GRN }, line: { type: "none" } });
+    mono(s, String(i + 1), { x: M + 0.14, y: y + 0.16, w: 0.44, h: 0.44, fontSize: 14, bold: true, color: "0D1018", align: "center", valign: "middle" });
+    txt(s, st[0], { x: M + 0.72, y: y + 0.08, w: 5.6, h: 0.28, fontSize: 12.5, bold: true, color: INK });
+    txt(s, st[1], { x: M + 0.72, y: y + 0.36, w: 5.6, h: 0.36, fontSize: 9.5, color: MUT });
+  });
+
+  panel(s, { x: 7.44, y: 1.84, w: 5.29, h: 4.3, fill: PANEL, line: EDGE });
+  mono(s, "판정 예시  ·  win=60 · KOSDAQ 전종목", { x: 7.64, y: 1.98, w: 4.9, h: 0.26, fontSize: 10, bold: true, color: AMB });
+  const ex = [
+    ["amihud2002", "비유동성 ↑ → 수익 ↑", "재현됨", GRN, "ic_ok"],
+    ["dnr1998", "회전율 ↓ → 수익 ↑", "재현됨", GRN, "ic_ok"],
+    ["jt1993", "6개월 모멘텀 지속", "방향 반대", MAG, "ic_no"],
+    ["ahxz2006", "특이변동성 ↑ → 수익 ↓", "판정 불가", DIM, "ic_no"],
+    ["roll1984", "스프레드 추정", "재현됨", GRN, "ic_ok"],
+  ];
+  ex.forEach((e, i) => {
+    const y = 2.34 + i * 0.52;
+    s.addShape(pres.ShapeType.rect, { x: 7.64, y, w: 4.9, h: 0.44, fill: { color: i % 2 ? PANEL3 : PANEL2 }, line: { type: "none" } });
+    mono(s, e[0], { x: 7.76, y, w: 1.4, h: 0.44, fontSize: 9.5, bold: true, color: INK, valign: "middle" });
+    txt(s, e[1], { x: 9.20, y, w: 2.0, h: 0.44, fontSize: 9.5, color: MUT, valign: "middle" });
+    s.addImage({ data: img(e[4]), x: 11.24, y: y + 0.14, w: 0.17, h: 0.17 });
+    mono(s, e[2], { x: 11.48, y, w: 1.0, h: 0.44, fontSize: 9.5, bold: true, color: e[3], valign: "middle" });
+  });
+  txt(s, "jt1993 모멘텀은 코스닥에서 방향이 뒤집힌다 — 널리 알려진 사실이다.\n인용은 하되 \"우리 표본에서는 반대\"가 값에 붙어 나간다.", {
+    x: 7.64, y: 5.10, w: 4.9, h: 0.5, fontSize: 9.5, italic: true, color: AMB, lineSpacing: 13 });
+  txt(s, "판정은 매번 표본 구간과 함께 기록된다. 같은 논문이라도 구간이 바뀌면 판정이 바뀔 수 있고, 그 변화 자체가 신호다.", {
+    x: 7.64, y: 5.68, w: 4.9, h: 0.5, fontSize: 9.5, color: MUT, lineSpacing: 13 });
+
+  panel(s, { x: M, y: 6.18, w: CW, h: 0.66, fill: "2A1520", line: "5C2A3A" });
+  txt(s, [
+    { text: "재현 실패는 실패가 아니다.  ", options: { bold: true, color: MAG } },
+    { text: "\"이 논문은 코스닥에서 성립하지 않는다\"는 것도 측정 결과다. 지우지 않고 남겨 두면, 다음 사람이 같은 논문을 다시 주워 오는 일을 막는다.", options: { color: INK } },
+  ], { x: M + 0.26, y: 6.18, w: CW - 0.52, h: 0.66, fontSize: 11.5, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
+}
+
+/* ═══════════ 6. 감가·은퇴 + 차트 ═══════════ */
+{
+  const s = slide();
+  header(s, "DECAY & RETIRE", "채택은 상태이지 영구 자격이 아니다",
+         "채택본에도 반감기를 둔다. 반감기가 지나면 재현을 다시 돌리고, 결과에 따라 유지·경고·은퇴로 나뉜다.");
+
+  const rules = [
+    ["반감기 180일", "채택 후 180영업일이 지나면 재현 재검 대상이 된다. 하루 1편씩 오래된 순으로 돈다.", CYN],
+    ["1회 실패 → 경고", "재현이 깨지면 은퇴시키지 않고 '경고'로 표시한다. 그 팩터를 쓰는 리포트 절 하단에 그대로 찍힌다.", AMB],
+    ["연속 2회 실패 → 은퇴", "다음 반감기에도 깨지면 은퇴한다. 인용이 끊기고, 그 팩터를 쓰던 계산은 '방법론 없음'으로 빠진다.", MAG],
+    ["은퇴본은 지우지 않는다", "retired 상태로 원장에 남는다. 같은 논문이 다시 수확되면 '이미 은퇴함'으로 걸러진다.", DIM],
+  ];
+  rules.forEach((r, i) => {
+    const y = 1.84 + i * 0.94;
+    panel(s, { x: M, y, w: 5.5, h: 0.84, fill: PANEL, line: EDGE });
+    s.addShape(pres.ShapeType.rect, { x: M + 0.16, y: y + 0.18, w: 0.16, h: 0.48, fill: { color: r[2] }, line: { type: "none" } });
+    txt(s, r[0], { x: M + 0.48, y: y + 0.12, w: 4.8, h: 0.28, fontSize: 13, bold: true, color: r[2] });
+    txt(s, r[1], { x: M + 0.48, y: y + 0.42, w: 4.85, h: 0.38, fontSize: 10, color: MUT });
+  });
+
+  panel(s, { x: 6.4, y: 1.84, w: 6.33, h: 3.76, fill: PANEL, line: EDGE });
+  txt(s, "살아있는 채택본 — 12개월 시뮬레이션", { x: 6.64, y: 1.98, w: 5.8, h: 0.28, fontSize: 13, bold: true, color: INK });
+  txt(s, "주 2편 채택 · 반감기 180일 · 재현 실패율 18% 가정", { x: 6.64, y: 2.26, w: 5.8, h: 0.22, fontSize: 9.5, color: DIM });
+  const months = ["1월","2월","3월","4월","5월","6월","7월","8월","9월","10월","11월","12월"];
+  s.addChart(pres.ChartType.bar, [
+    { name: "유지", labels: months, values: [12,18,25,32,38,43,47,50,54,57,60,63] },
+    { name: "신규 채택", labels: months, values: [8,8,8,8,8,8,8,8,8,8,8,8] },
+    { name: "은퇴", labels: months, values: [0,0,1,1,2,3,4,4,5,5,5,6] },
+  ], {
+    x: 6.62, y: 2.56, w: 5.9, h: 2.9,
+    barGrouping: "stacked", chartColors: [C1, C2, C4],
+    showLegend: true, legendPos: "b", legendColor: MUT, legendFontSize: 9, legendFontFace: F,
+    showValue: false,
+    catAxisLabelColor: MUT, catAxisLabelFontSize: 8.5, catAxisLabelFontFace: F, catAxisLineShow: false,
+    valAxisLabelColor: MUT, valAxisLabelFontSize: 8.5, valAxisLabelFontFace: F, valAxisLineShow: false,
+    valGridLine: { color: "2A3350", size: 1 }, catGridLine: { style: "none" },
+    valAxisMaxVal: 80, plotArea: { fill: { color: PANEL } }, chartArea: { fill: { color: PANEL } },
+    dataBorder: { pt: 1.5, color: PANEL },
+  });
+  panel(s, { x: 6.4, y: 5.76, w: 6.33, h: 1.06, fill: PANEL3, line: EDGE });
+  txt(s, "12편에서 시작해 1년 뒤 63편 — 다만 그 63편은 전부 최근 재현 검사를 통과한 것들이다. 편수가 아니라 통과 여부가 자격이다.", {
+    x: 6.64, y: 5.76, w: 5.85, h: 1.06, fontSize: 10.5, color: INK, valign: "middle" });
+  foot(s, "// 시뮬레이션 가정값이며 실측이 아니다. 실제 채택률은 Phase 2 병행 운영에서 측정한다.");
+}
+
+/* ═══════════ 7. 논문 원장 스키마 ═══════════ */
+{
+  const s = slide();
+  header(s, "PAPER LEDGER", "논문 원장 — 채택도 은퇴도 이력으로 남는다",
+         ".papers.json 을 목록에서 append-only 원장으로 바꾼다. 상태가 바뀐 이유가 항상 남아 있어야 한다.");
+
+  panel(s, { x: M, y: 1.86, w: 7.0, h: 4.32, fill: "0A1020", line: EDGE });
+  mono(s, [
+    '{',
+    '  "schema": "ki.papers/2",',
+    '  "papers": {',
+    '    "amihud2002": {',
+    '      "title":   "Illiquidity and stock returns",',
+    '      "doi":     "10.1016/S1386-4181(01)00024-6",',
+    '      "grade":   "저널 게재",',
+    '      "question": "q2",',
+    '',
+    '      "state":   "adopted",        // adopted | warned | retired',
+    '      "adopted_at":  "2026-02-11",',
+    '      "half_life_d": 180,',
+    '      "recheck_due": "2026-11-05",',
+    '',
+    '      "replication": [             // append-only',
+    '        { "at": "2026-02-11", "verdict": "재현됨",',
+    '          "universe": "KOSDAQ", "n": 1418,',
+    '          "window":   "2023-01-02..2026-02-07",',
+    '          "claim":    "비유동성 상위분위 초과수익 > 0",',
+    '          "observed": { "spread_bp": 41, "t": 2.31 } }',
+    '      ],',
+    '',
+    '      "limits": [',
+    '        "표본은 미국 상장주 — 코스닥 외삽 근거 아님",',
+    '        "거래정지 구간 제외 · 생존편의 보정 안 함"',
+    '      ]',
+    '    }',
+    '  }',
+    '}',
+  ].join("\n"), { x: M + 0.24, y: 2.0, w: 6.55, h: 4.06, fontSize: 8.0, color: "A9C8F0", lineSpacing: 10.4, valign: "top" });
+
+  const notes = [
+    ["state 가 자격이다", "adopted 만 인용할 수 있다. warned 는 인용은 되지만 경고가 함께 나가고, retired 는 인용 자체가 막힌다.", GRN],
+    ["replication 은 배열이다", "덮어쓰지 않고 쌓는다. 언제 재현했고 그때 무엇을 봤는지가 전부 남아, 판정이 바뀐 이유를 되짚을 수 있다.", CYN],
+    ["observed 는 측정값이다", "논문이 뭐라 했는지가 아니라 우리 원장에서 무엇이 나왔는지다. 이 값이 없으면 채택되지 않는다.", AMB],
+    ["limits 는 여전히 필수다", "논문이 주장하지 않는 것을 함께 낸다. 비어 있으면 게이트가 막는다 — 기존 규칙 그대로.", PUR],
+  ];
+  notes.forEach((n, i) => {
+    const y = 1.86 + i * 1.1;
+    panel(s, { x: 7.86, y, w: 4.87, h: 0.98, fill: PANEL, line: EDGE });
+    s.addShape(pres.ShapeType.rect, { x: 8.06, y: y + 0.19, w: 0.14, h: 0.14, fill: { color: n[2] }, line: { type: "none" } });
+    txt(s, n[0], { x: 8.32, y: y + 0.11, w: 4.3, h: 0.28, fontSize: 12, bold: true, color: n[2] });
+    txt(s, n[1], { x: 8.06, y: y + 0.40, w: 4.56, h: 0.5, fontSize: 9.5, color: MUT });
+  });
+  foot(s, "// selftest 확장: 모든 팩터가 state=adopted 인 논문을 인용하는가 · replication 이 비어 있는 채택본이 없는가");
+}
+
+/* ═══════════ 8. 동적 에이전트 — 상설 vs 소집 ═══════════ */
+{
+  const s = slide();
+  header(s, "DYNAMIC AGENTS", "상설은 셋뿐이다. 나머지는 불릴 때만 온다.",
+         "조직도를 고정하지 않는다. 매일 여덟 데스크를 전부 돌리는 대신, 그날 실제로 무언가 일어난 곳에만 에이전트를 띄운다.");
+
+  panel(s, { x: M, y: 1.82, w: 4.4, h: 4.3, fill: PANEL, line: GRN });
+  mono(s, "STANDING  ·  상설 3", { x: M + 0.24, y: 1.98, w: 3.9, h: 0.26, fontSize: 11, bold: true, color: GRN });
+  txt(s, "항상 떠 있다. 하루의 리듬을 만든다.", { x: M + 0.24, y: 2.26, w: 3.9, h: 0.24, fontSize: 10, color: MUT });
+  const standing = [
+    ["ag_dataops", "data-ops", "원장 적재 · 품질 감시", "원장 쓰기 단독", GRN],
+    ["ag_compliance", "compliance-officer", "게이트 판정 · 발행 승인", "거부권", ORG],
+    ["ag_chair", "ic-chair", "봉투 수집 · 쟁점 정렬", "조립만", GLD],
+  ];
+  standing.forEach((a, i) => {
+    const y = 2.62 + i * 1.14;
+    panel(s, { x: M + 0.22, y, w: 3.96, h: 1.02, fill: PANEL2, line: EDGE, off: 0 });
+    s.addImage({ data: img(a[0]), x: M + 0.36, y: y + 0.18, w: 0.66, h: 0.66 });
+    mono(s, a[1], { x: M + 1.14, y: y + 0.14, w: 2.9, h: 0.26, fontSize: 10.5, bold: true, color: INK });
+    txt(s, a[2], { x: M + 1.14, y: y + 0.40, w: 2.9, h: 0.24, fontSize: 10, color: MUT });
+    mono(s, a[3], { x: M + 1.14, y: y + 0.66, w: 2.9, h: 0.24, fontSize: 9, bold: true, color: a[4] });
+  });
+
+  panel(s, { x: 5.32, y: 1.82, w: 7.41, h: 4.3, fill: PANEL, line: AMB });
+  mono(s, "SPAWNED  ·  이벤트 소집 N", { x: 5.56, y: 1.98, w: 6.9, h: 0.26, fontSize: 11, bold: true, color: AMB });
+  txt(s, "트리거가 뜰 때만 인스턴스가 생기고, 봉투를 내면 사라진다. 상태를 들고 있지 않으므로 같은 입력이면 같은 결과가 나온다.", {
+    x: 5.56, y: 2.26, w: 6.9, h: 0.24, fontSize: 10, color: MUT });
+  const spawned = [
+    ["ag_equity", "equity-analyst", "공시 1건 = 인스턴스 1개", BLU],
+    ["ag_quant", "quant-researcher", "재현 대상 논문 1편 = 1개", PUR],
+    ["ag_macro", "macro-strategist", "일정·지표 갱신 시 1개", CYN],
+    ["ag_exec", "execution-trader", "회수계획 변동 종목당 1개", AMB],
+    ["ag_risk", "risk-officer", "봉투 묶음당 1개 (검산)", MAG],
+  ];
+  spawned.forEach((a, i) => {
+    const x = 5.56 + (i % 3) * 2.32, y = 2.62 + Math.floor(i / 3) * 1.32;
+    panel(s, { x, y, w: 2.18, h: 1.2, fill: PANEL2, line: EDGE, off: 0 });
+    s.addImage({ data: img(a[0]), x: x + 0.14, y: y + 0.14, w: 0.54, h: 0.54 });
+    mono(s, "×N", { x: x + 0.76, y: y + 0.2, w: 1.3, h: 0.26, fontSize: 12, bold: true, color: a[3] });
+    mono(s, a[1], { x: x + 0.14, y: y + 0.74, w: 1.96, h: 0.22, fontSize: 8.8, bold: true, color: INK });
+    txt(s, a[2], { x: x + 0.14, y: y + 0.94, w: 1.96, h: 0.22, fontSize: 8.5, color: MUT });
+  });
+
+  panel(s, { x: M, y: 6.28, w: CW, h: 0.6, fill: PANEL3, line: EDGE });
+  txt(s, [
+    { text: "왜 소집인가 —  ", options: { bold: true, color: AMB } },
+    { text: "85종목 × 4데스크를 매일 돌리면 340회다. 그런데 어제와 달라진 것이 없는 종목을 다시 읽는 것은 같은 답을 다시 사는 일이다. 변동이 있는 곳에만 예산을 쓴다.", options: { color: INK } },
+  ], { x: M + 0.26, y: 6.28, w: CW - 0.52, h: 0.6, fontSize: 11, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
+}
+
+/* ═══════════ 9. 생명주기 ═══════════ */
+{
+  const s = slide();
+  header(s, "LIFECYCLE", "소집 → 작업 → 봉투 → 소멸",
+         "에이전트는 세션을 갖지 않는다. 기억을 들고 있지 않으므로, 어제의 오해가 오늘로 넘어오지 않는다.");
+
+  const life = [
+    ["SPAWN", "소집", "트리거가 입력을 확정해서 넘긴다.\n종목코드 · 공시 접수번호 · 기준일.\n그 밖의 것은 볼 수 없다.", CYN, 1.0],
+    ["WORK", "작업", "허용된 MCP 읽기 도구만 부른다.\n예산(토큰·호출수)이 정해져 있고,\n넘으면 그대로 중단된다.", BLU, 0.75],
+    ["ENVELOPE", "봉투", "측정값 + 등급 + 가정 + 한계.\n스키마를 못 맞추면 산출이 아니라\n실패로 기록된다.", GRN, 0.5],
+    ["DISSOLVE", "소멸", "인스턴스가 사라진다.\n남는 것은 봉투와 실행 로그뿐 —\n둘 다 재생 가능하다.", DIM, 0.15],
+  ];
+  life.forEach((l, i) => {
+    const x = M + i * 3.12;
+    panel(s, { x, y: 1.88, w: 2.86, h: 3.5, fill: PANEL, line: EDGE });
+    s.addImage({ data: img("ag_equity"), x: x + 1.03, y: 2.08, w: 0.8, h: 0.8, transparency: Math.round((1 - l[4]) * 100) });
+    mono(s, l[0], { x: x + 0.16, y: 3.02, w: 2.54, h: 0.26, fontSize: 10.5, bold: true, color: l[3], align: "center", charSpacing: 1 });
+    txt(s, l[1], { x: x + 0.16, y: 3.30, w: 2.54, h: 0.36, fontSize: 18, bold: true, color: INK, align: "center" });
+    txt(s, l[2], { x: x + 0.18, y: 3.80, w: 2.5, h: 1.1, fontSize: 10, color: MUT, align: "center", lineSpacing: 15 });
+    pxBar(s, x + 0.3, 5.02, 2.26, 0.12, l[4], l[3]);
+    if (i < 3) s.addImage({ data: img("ar_cy"), x: x + 2.9, y: 2.34, w: 0.3, h: 0.19 });
+  });
+
+  const props = [
+    ["무상태 (stateless)", "같은 입력 → 같은 봉투. 어제 무엇을 봤는지 기억하지 않는다.", GRN],
+    ["예산 제한", "인스턴스마다 호출·토큰 상한. 초과하면 '미완'으로 끝나지 조용히 넘어가지 않는다.", AMB],
+    ["격리", "다른 인스턴스의 산출을 보지 않는다. 수렴하면 교차검증의 의미가 사라진다.", CYN],
+    ["재생 가능", "실행 로그로 같은 인스턴스를 다시 띄워 결과를 대조할 수 있다.", PUR],
+  ];
+  props.forEach((p, i) => {
+    const x = M + i * 3.12;
+    panel(s, { x, y: 5.56, w: 2.86, h: 1.28, fill: PANEL3, line: EDGE });
+    txt(s, p[0], { x: x + 0.18, y: 5.7, w: 2.5, h: 0.26, fontSize: 11.5, bold: true, color: p[2] });
+    txt(s, p[1], { x: x + 0.18, y: 5.98, w: 2.52, h: 0.74, fontSize: 9.5, color: MUT });
+  });
+}
+
+/* ═══════════ 10. 트리거 매트릭스 ═══════════ */
+{
+  const s = slide();
+  header(s, "TRIGGERS", "무엇이 누구를 부르는가",
+         "트리거는 원장의 변화에서 나온다. 사람이 부르는 것이 아니라 데이터가 부른다.");
+
+  const rows = [
+    ["DART 신규 공시", "equity-analyst", "접수번호 1건", "공시당 1", "원문 링크 + 사실관계 정리"],
+    ["종가 ±8% 이상 변동", "equity · execution", "종목코드 · 기준일", "종목당 1", "무엇이 달라졌나 · 처분여건 재계산"],
+    ["회수계획 진척 변동", "execution-trader", "exit_plan 행", "종목당 1", "§3 집행 시뮬 재실행"],
+    ["재현 재검 기한 도래", "quant-researcher", "논문 키 1개", "일 1편", "재현 판정 + 원장 append"],
+    ["ECOS·캘린더 갱신", "macro-strategist", "지표 · 일정", "일 1", "§4·§7 국면 서술"],
+    ["락업 만료 D-30 진입", "execution · macro", "종목코드", "종목당 1", "물량 압력 · 시점 코멘트 (등급 '추정')"],
+    ["봉투 묶음 완성", "risk-officer", "그날 봉투 전량", "일 1", "숫자 재검산 · 반려 또는 통과"],
+    ["게이트 통과분 확정", "ic-chair", "통과 봉투", "일 1", "회의자료 조립 · 쟁점 정렬"],
+  ];
+  const head = ["트리거 (원장의 변화)", "소집되는 에이전트", "넘겨받는 입력", "인스턴스", "산출"].map((h, i) => ({
+    text: h, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10.5, valign: "middle", fontFace: FM },
+  }));
+  const body = [head];
+  rows.forEach((r, i) => body.push([
+    { text: r[0], options: { color: INK, fontSize: 10, bold: true, valign: "middle", fill: { color: i % 2 ? PANEL3 : PANEL } } },
+    { text: r[1], options: { color: CYN, fontSize: 9.5, valign: "middle", fontFace: FM, fill: { color: i % 2 ? PANEL3 : PANEL } } },
+    { text: r[2], options: { color: MUT, fontSize: 9.5, valign: "middle", fill: { color: i % 2 ? PANEL3 : PANEL } } },
+    { text: r[3], options: { color: GRN, fontSize: 9.5, bold: true, align: "center", valign: "middle", fill: { color: i % 2 ? PANEL3 : PANEL } } },
+    { text: r[4], options: { color: MUT, fontSize: 9.5, valign: "middle", fill: { color: i % 2 ? PANEL3 : PANEL } } },
+  ]));
+  s.addTable(body, {
+    x: M, y: 1.84, w: CW, colW: [2.66, 2.72, 1.94, 1.05, 3.76],
+    border: { type: "solid", color: EDGE, pt: 1 },
+    fontFace: F, rowH: 0.45, margin: 0.08, autoPage: false,
+  });
+
+  panel(s, { x: M, y: 6.14, w: CW, h: 0.62, fill: PANEL3, line: EDGE });
+  txt(s, [
+    { text: "트리거가 없으면 아무도 소집되지 않는다. ", options: { bold: true, color: GRN } },
+    { text: "조용한 날은 조용한 것이 정상이다 — 할 말이 없는데 데스크를 돌려 말을 만들게 하는 것이 이 구조가 막으려는 실패다.", options: { color: INK } },
+  ], { x: M + 0.26, y: 6.14, w: CW - 0.52, h: 0.62, fontSize: 11, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
+}
+
+/* ═══════════ 11. 부하 비교 차트 ═══════════ */
+{
+  const s = slide();
+  header(s, "LOAD", "전수 실행 대비 실제 부하",
+         "20영업일 시뮬레이션. 전수 방식은 종목수에 고정으로 묶이고, 이벤트 방식은 그날 일어난 일의 수만큼만 돈다.");
+
+  panel(s, { x: M, y: 1.84, w: 8.3, h: 4.3, fill: PANEL, line: EDGE });
+  txt(s, "일별 에이전트 인스턴스 수", { x: M + 0.26, y: 1.98, w: 5.0, h: 0.3, fontSize: 14, bold: true, color: INK });
+  txt(s, "가정 — 감시 85종목 · 데스크 4 · 공시 발생률 6% · ±8% 변동 발생률 4%", {
+    x: M + 0.26, y: 2.28, w: 7.6, h: 0.22, fontSize: 9.5, color: DIM });
+  const days = Array.from({ length: 20 }, (_, i) => "D" + (i + 1));
+  s.addChart(pres.ChartType.line, [
+    { name: "전수 실행 (85×4)", labels: days, values: Array(20).fill(340) },
+    { name: "이벤트 소집", labels: days, values: [38,52,44,61,35,49,88,41,57,46,72,39,55,64,43,51,47,95,58,44] },
+  ], {
+    x: M + 0.2, y: 2.6, w: 7.9, h: 3.3,
+    chartColors: [C4, C1], lineDataSymbol: "none", lineSize: 3,
+    showLegend: true, legendPos: "b", legendColor: MUT, legendFontSize: 10, legendFontFace: F,
+    catAxisLabelColor: DIM, catAxisLabelFontSize: 8, catAxisLabelFontFace: FM, catAxisLineShow: false,
+    valAxisLabelColor: MUT, valAxisLabelFontSize: 9, valAxisLabelFontFace: FM, valAxisLineShow: false,
+    valGridLine: { color: "2A3350", size: 1 }, catGridLine: { style: "none" },
+    valAxisMinVal: 0, valAxisMaxVal: 400,
+    plotArea: { fill: { color: PANEL } }, chartArea: { fill: { color: PANEL } },
+  });
+
+  const st = [["6,800", "전수 · 20일 누계", "인스턴스", C4], ["1,079", "이벤트 · 20일 누계", "인스턴스", C1],
+              ["-84%", "부하 감소", "같은 커버리지", GRN], ["95", "최대 피크일", "D18 · 공시 집중", AMB]];
+  st.forEach((t, i) => {
+    const y = 1.84 + i * 1.11;
+    panel(s, { x: 9.12, y, w: 3.61, h: 0.99, fill: PANEL, line: EDGE });
+    mono(s, t[0], { x: 9.34, y: y + 0.12, w: 3.2, h: 0.4, fontSize: 24, bold: true, color: t[3] });
+    txt(s, t[1], { x: 9.34, y: y + 0.54, w: 3.2, h: 0.22, fontSize: 10.5, bold: true, color: INK });
+    txt(s, t[2], { x: 9.34, y: y + 0.74, w: 3.2, h: 0.2, fontSize: 9, color: MUT });
+  });
+
+  panel(s, { x: M, y: 6.3, w: CW, h: 0.58, fill: PANEL3, line: EDGE });
+  txt(s, [
+    { text: "핵심은 절감이 아니라 피크다. ", options: { bold: true, color: AMB } },
+    { text: "전수 방식은 조용한 날에도 340을 쓰느라, 정작 공시가 몰린 날(D18)에 더 깊이 볼 여력이 없다. 이벤트 방식은 그날 예산을 그날 일에 쓴다.", options: { color: INK } },
+  ], { x: M + 0.26, y: 6.3, w: CW - 0.52, h: 0.58, fontSize: 11, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
+  foot(s, "// 발생률은 가정값이다. 실측은 Phase 1 에서 원장의 공시·변동 이력으로 역산한다.");
+}
+
+/* ═══════════ 12. 에스컬레이션 사다리 ═══════════ */
+{
+  const s = slide();
+  header(s, "ESCALATION", "쉬운 일에 비싼 모델을 쓰지 않는다",
+         "모든 인스턴스가 같은 급일 필요는 없다. 아래에서 시작해, 걸리는 것만 위로 올린다.");
+
+  const tiers = [
+    ["T1", "경량", "정형 추출 · 분류", "공시 제목에서 종류 판별, 값 파싱, 스키마 채우기처럼 답이 하나로 정해지는 일.", "전체의 ~70%", CYN, 0.28],
+    ["T2", "표준", "해석 · 서술", "측정값을 읽고 §5·§6 초안을 쓰는 일. 대부분의 데스크 산출이 여기서 나온다.", "전체의 ~25%", GRN, 0.62],
+    ["T3", "상위", "이견 · 이상치 · 재현 설계", "데스크 간 판정이 갈리거나, 재현 관문 설계처럼 틀리면 비싼 일.", "전체의 ~5%", AMB, 1.0],
+  ];
+  tiers.forEach((t, i) => {
+    const y = 1.86 + i * 1.42;
+    panel(s, { x: M, y, w: 8.2, h: 1.3, fill: PANEL, line: EDGE });
+    s.addShape(pres.ShapeType.rect, { x: M + 0.18, y: y + 0.2, w: 0.9, h: 0.9, fill: { color: t[5] }, line: { type: "none" } });
+    mono(s, t[0], { x: M + 0.18, y: y + 0.2, w: 0.9, h: 0.9, fontSize: 22, bold: true, color: "0D1018", align: "center", valign: "middle" });
+    txt(s, t[1] + "  ·  " + t[2], { x: M + 1.26, y: y + 0.18, w: 5.0, h: 0.3, fontSize: 14, bold: true, color: t[5] });
+    txt(s, t[3], { x: M + 1.26, y: y + 0.52, w: 6.7, h: 0.44, fontSize: 10.5, color: MUT });
+    pxBar(s, M + 1.26, y + 1.0, 5.2, 0.14, t[6], t[5]);
+    mono(s, t[4], { x: M + 6.6, y: y + 0.94, w: 1.4, h: 0.24, fontSize: 9.5, bold: true, color: MUT, align: "right" });
+  });
+
+  panel(s, { x: 9.02, y: 1.86, w: 3.71, h: 2.72, fill: PANEL, line: AMB });
+  mono(s, "승격 조건", { x: 9.24, y: 2.0, w: 3.3, h: 0.26, fontSize: 11, bold: true, color: AMB });
+  ["두 데스크의 판정이 갈릴 때",
+   "리스크 검산이 원장 값과 불일치할 때",
+   "게이트에 두 번 연속 반려될 때",
+   "재현 판정이 '판정 불가' 로 나올 때",
+   "예산 초과로 T1·T2 가 미완일 때"].forEach((t, i) => {
+    s.addImage({ data: img("ar_am"), x: 9.24, y: 2.42 + i * 0.42, w: 0.24, h: 0.15 });
+    txt(s, t, { x: 9.56, y: 2.34 + i * 0.42, w: 3.0, h: 0.3, fontSize: 10, color: INK });
+  });
+
+  panel(s, { x: 9.02, y: 4.76, w: 3.71, h: 2.08, fill: PANEL3, line: EDGE });
+  mono(s, "승격은 기록된다", { x: 9.24, y: 4.9, w: 3.3, h: 0.26, fontSize: 11, bold: true, color: GRN });
+  txt(s, "어떤 인스턴스가 왜 올라갔는지가 봉투에 남는다. 승격이 잦은 지점이 곧 이 시스템이 아직 약한 곳이므로, 그 분포를 스코어카드에서 본다.", {
+    x: 9.24, y: 5.2, w: 3.3, h: 1.0, fontSize: 10, color: MUT });
+  mono(s, "escalated_from: \"T2\"\nescalation_reason: \"desk_conflict\"", {
+    x: 9.24, y: 6.2, w: 3.3, h: 0.5, fontSize: 8.5, color: CYN, lineSpacing: 12 });
+}
+
+/* ═══════════ 13. 정보교류차단 (유지) ═══════════ */
+{
+  const s = slide();
+  header(s, "THE WALL", "동적으로 바뀌어도 벽은 그대로다",
+         "에이전트가 매번 새로 생기더라도, 원장에 쓸 수 있는 도구를 받는 인스턴스는 없다.");
+
+  panel(s, { x: M, y: 1.9, w: 4.5, h: 3.5, fill: PANEL, line: GRN });
+  mono(s, "MEASUREMENT  ·  측정층", { x: M + 0.24, y: 2.06, w: 4.0, h: 0.26, fontSize: 10.5, bold: true, color: GRN });
+  s.addImage({ data: img("ob_db"), x: M + 0.24, y: 2.44, w: 0.86, h: 0.86 });
+  txt(s, "ki.sqlite", { x: M + 1.24, y: 2.5, w: 3.0, h: 0.4, fontSize: 22, bold: true, color: INK });
+  mono(s, "7 tables · 사실만", { x: M + 1.24, y: 2.94, w: 3.0, h: 0.24, fontSize: 9.5, color: MUT });
+  ["공식 API 5종의 값만 들어간다", "쓰기 주체는 data-ops 단독", "KIS 장중 스냅샷은 persist=False", "오염되면 되돌릴 수 없다"].forEach((t, i) => {
+    mono(s, "▸ ", { x: M + 0.26, y: 3.5 + i * 0.42, w: 0.24, h: 0.26, fontSize: 10, color: GRN });
+    txt(s, t, { x: M + 0.52, y: 3.48 + i * 0.42, w: 3.8, h: 0.3, fontSize: 11, color: INK });
+  });
+
+  for (let i = 0; i < 6; i++) s.addImage({ data: img("ob_wall"), x: 5.34, y: 1.9 + i * 0.585, w: 0.6, h: 0.6 });
+  s.addShape(pres.ShapeType.rect, { x: 5.16, y: 3.22, w: 0.96, h: 0.66, fill: { color: "0D1018" }, line: { color: AMB, width: 1.25 } });
+  mono(s, "READ\nONLY", { x: 5.16, y: 3.22, w: 0.96, h: 0.66, fontSize: 10, bold: true, color: AMB, align: "center", valign: "middle", lineSpacing: 12 });
+
+  panel(s, { x: 6.34, y: 1.9, w: 6.39, h: 3.5, fill: PANEL, line: AMB });
+  mono(s, "INTERPRETATION  ·  판단층 (동적)", { x: 6.58, y: 2.06, w: 5.9, h: 0.26, fontSize: 10.5, bold: true, color: AMB });
+  const tools = [["ledger.facts", GRN], ["ledger.candles", GRN], ["ledger.factors", GRN], ["ledger.calendar", GRN],
+                 ["ledger.macro", GRN], ["ledger.disclosure", GRN], ["ledger.quality", GRN], ["ledger.papers", CYN]];
+  tools.forEach((t, i) => {
+    const x = 6.58 + (i % 2) * 3.0, y = 2.44 + Math.floor(i / 2) * 0.42;
+    s.addShape(pres.ShapeType.rect, { x, y, w: 2.82, h: 0.34, fill: { color: PANEL2 }, line: { type: "none" } });
+    s.addImage({ data: img("ic_ok"), x: x + 0.1, y: y + 0.1, w: 0.14, h: 0.14 });
+    mono(s, t[0], { x: x + 0.32, y, w: 2.4, h: 0.34, fontSize: 9.5, bold: true, color: t[1], valign: "middle" });
+  });
+  mono(s, "ingest · catchup · fundamentals · KIS 주문  →  도구가 존재하지 않는다", {
+    x: 6.58, y: 4.32, w: 5.9, h: 0.26, fontSize: 9.5, bold: true, color: MAG });
+  txt(s, "새 도구 ledger.papers 가 추가된다 — 논문 원장을 읽기만 한다. 채택·은퇴를 쓰는 것은 재현 파이프라인(배치)이지 에이전트가 아니다.", {
+    x: 6.58, y: 4.64, w: 5.9, h: 0.6, fontSize: 10, color: MUT });
+
+  const w3 = [["벽은 구조다", "\"쓰지 마라\"라고 적는 대신, 쓸 수 있는 도구를 만들지 않는다."],
+              ["역류가 없다", "해석이 원장으로 되돌아가는 경로가 스키마에도 도구에도 없다."],
+              ["인스턴스가 늘어도 같다", "1개든 400개든 전부 같은 읽기 도구 집합만 받는다."]];
+  w3.forEach((n, i) => {
+    const x = M + i * 4.11;
+    panel(s, { x, y: 5.62, w: 3.94, h: 1.18, fill: PANEL3, line: EDGE });
+    txt(s, n[0], { x: x + 0.2, y: 5.76, w: 3.5, h: 0.28, fontSize: 12, bold: true, color: GRN });
+    txt(s, n[1], { x: x + 0.2, y: 6.06, w: 3.56, h: 0.62, fontSize: 10, color: MUT });
+  });
+}
+
+/* ═══════════ 14. 봉투 v2 ═══════════ */
+{
+  const s = slide();
+  header(s, "ENVELOPE v2", "봉투에 재현 결과가 함께 실린다",
+         "논문 키만 다는 것으로는 부족하다. 그 논문이 우리 표본에서 어떻게 나왔는지가 같이 가야 한다.");
+
+  panel(s, { x: M, y: 1.88, w: 6.7, h: 4.24, fill: "0A1020", line: EDGE });
+  mono(s, [
+    '{',
+    '  "claim":        "처분 소요일수 12.4 영업일",',
+    '  "value":        12.4,',
+    '  "unit":         "business_days",',
+    '  "asof":         "2026-09-11",  "stale_days": 2,',
+    '',
+    '  "source_grade": "해석",',
+    '  "sources":      ["KRX/일별매매정보"],',
+    '',
+    '  "method": {',
+    '    "paper":       "amihud2002",',
+    '    "paper_state": "adopted",',
+    '    "replication": {                    // ← v2 신설',
+    '      "verdict":  "재현됨",',
+    '      "at":       "2026-02-11",',
+    '      "universe": "KOSDAQ", "n": 1418,',
+    '      "observed": { "spread_bp": 41, "t": 2.31 }',
+    '    },',
+    '    "assumes": { "participation": 0.15 }',
+    '  },',
+    '',
+    '  "limits": ["논문 표본은 미국 상장주 — 코스닥 외삽 근거 아님"],',
+    '',
+    '  "desk": "execution-trader",',
+    '  "instance": "exec-20260911-000660-a91f",   // ← v2 신설',
+    '  "tier": "T2",  "escalated_from": null,',
+    '  "reviewed_by": ["risk", "compliance"]',
+    '}',
+  ].join("\n"), { x: M + 0.24, y: 2.02, w: 6.25, h: 3.98, fontSize: 8.0, color: "A9C8F0", lineSpacing: 10.3, valign: "top" });
+
+  const f = [
+    ["replication", "논문이 우리 표본에서 어떻게 나왔는가", "verdict 가 '재현됨'이 아니면 그 팩터는 리포트에서 경고와 함께 나가거나 아예 빠진다.", GRN],
+    ["paper_state", "그 논문이 아직 살아있는가", "retired 논문을 인용한 봉투는 게이트에서 즉시 반려된다.", CYN],
+    ["instance", "어느 인스턴스가 만들었는가", "이 ID 로 같은 실행을 다시 띄워 결과를 대조할 수 있다 — 재생 가능성의 열쇠.", PUR],
+    ["tier · escalated_from", "어느 급이 처리했고 왜 올라왔는가", "승격이 잦은 지점이 이 시스템이 약한 곳이다. 스코어카드가 이 분포를 본다.", AMB],
+  ];
+  f.forEach((x2, i) => {
+    const y = 1.88 + i * 1.08;
+    panel(s, { x: 7.52, y, w: 5.21, h: 0.96, fill: PANEL, line: EDGE });
+    mono(s, x2[0], { x: 7.74, y: y + 0.1, w: 2.6, h: 0.24, fontSize: 10, bold: true, color: x2[3] });
+    txt(s, x2[1], { x: 10.2, y: y + 0.11, w: 2.36, h: 0.22, fontSize: 8.8, color: MUT, align: "right" });
+    txt(s, x2[2], { x: 7.74, y: y + 0.38, w: 4.8, h: 0.5, fontSize: 9.5, color: INK });
+  });
+  panel(s, { x: 7.52, y: 6.22, w: 5.21, h: 0.6, fill: PANEL3, line: EDGE });
+  txt(s, "등급 '해석' 은 그대로다 — 재현까지 통과해도 에이전트 문장은 1차 자료가 되지 않는다.", {
+    x: 7.74, y: 6.22, w: 4.8, h: 0.6, fontSize: 10, bold: true, color: AMB, valign: "middle" });
+}
+
+/* ═══════════ 15. 일곱 게이트 ═══════════ */
+{
+  const s = slide();
+  header(s, "GATES ×7", "발행 전 일곱 관문 — 하나라도 걸리면 멈춘다",
+         "여섯 개는 지난 방안 그대로이고, ③ 재현 관문이 새로 들어간다.");
+
+  const gates = [
+    ["판정 어휘", "점수·등급·목표주가·매수/매도 어휘가 있는가", "문장 삭제 후 반려", MAG, false],
+    ["출처 등급", "모든 주장에 grade 가 있는가 · '해석'이 승격되지 않았는가", "등급 없는 주장 차단", AMB, false],
+    ["재현", "인용 논문이 우리 표본에서 재현됐는가", "미재현 인용은 즉시 반려", GRN, true],
+    ["논문 실재", "state=adopted 인가 · limits 가 비어 있지 않은가", "은퇴본 인용 시 반려", CYN, false],
+    ["신선도", "asof·stale_days 가 임계(3영업일)를 넘지 않는가", "값 대신 '데이터 없음'", BLU, false],
+    ["유출 검사", "키·URL·포트폴리오사 실명이 남았는가 (scrub())", "전체 발행 중단", ORG, false],
+    ["4-eyes", "리스크와 준법감시 양쪽이 승인했는가", "해당 절 제외", PUR, false],
+  ];
+  gates.forEach((g, i) => {
+    const col = i % 4, row = Math.floor(i / 4);
+    const x = M + col * 3.06, y = 1.86 + row * 2.24;
+    panel(s, { x, y, w: 2.86, h: 2.06, fill: g[4] ? "132318" : PANEL, line: g[4] ? GRN : EDGE });
+    s.addImage({ data: img("ob_gate"), x: x + 0.18, y: y + 0.18, w: 0.5, h: 0.5 });
+    mono(s, "GATE " + (i + 1), { x: x + 0.78, y: y + 0.2, w: 1.9, h: 0.22, fontSize: 9, bold: true, color: g[3], charSpacing: 1 });
+    txt(s, g[0], { x: x + 0.78, y: y + 0.4, w: 1.94, h: 0.3, fontSize: 14, bold: true, color: INK });
+    txt(s, g[1], { x: x + 0.18, y: y + 0.8, w: 2.5, h: 0.72, fontSize: 9.5, color: MUT });
+    s.addShape(pres.ShapeType.rect, { x: x + 0.18, y: y + 1.58, w: 2.5, h: 0.32, fill: { color: PANEL2 }, line: { type: "none" } });
+    mono(s, "✕ " + g[2], { x: x + 0.28, y: y + 1.58, w: 2.3, h: 0.32, fontSize: 8.8, bold: true, color: MUT, valign: "middle" });
+    if (g[4]) { s.addImage({ data: img("ic_spark"), x: x + 2.44, y: y + 0.16, w: 0.22, h: 0.22 }); }
+  });
+  panel(s, { x: M + 3.06 * 3, y: 4.10, w: 2.86, h: 2.06, fill: PANEL3, line: EDGE });
+  txt(s, "통과 아니면 반려다", { x: M + 3.06 * 3 + 0.18, y: 4.26, w: 2.5, h: 0.3, fontSize: 13, bold: true, color: GLD });
+  txt(s, "\"대체로 지켜졌다\"는 판정이 없다. 반려된 절은 회의자료에서 빈칸이 아니라 '반려됨 — 사유' 로 보인다. 조용히 통과시키는 것이 가장 위험하다.", {
+    x: M + 3.06 * 3 + 0.18, y: 4.6, w: 2.52, h: 1.4, fontSize: 10, color: MUT });
+  foot(s, "// 기존 selftest 128개는 그대로 둔다. 게이트는 코드가 아니라 '에이전트가 쓴 문장'을 검사하는 층으로 그 위에 얹는다.");
+}
+
+/* ═══════════ 16. 스코어카드 · 관측가능성 ═══════════ */
+{
+  const s = slide();
+  header(s, "SCORECARD & REPLAY", "데스크를 계측한다 — 다만 자동으로 고치지는 않는다",
+         "무엇이 얼마나 반려됐고 무엇이 재현에 실패했는지를 매주 본다. 프롬프트를 고치는 것은 사람이다.");
+
+  panel(s, { x: M, y: 1.86, w: 6.3, h: 3.0, fill: PANEL, line: EDGE });
+  txt(s, "주간 데스크 스코어카드", { x: M + 0.24, y: 2.0, w: 4.0, h: 0.3, fontSize: 14, bold: true, color: INK });
+  const sc = [
+    ["equity-analyst", 0.94, 0.06, GRN],
+    ["quant-researcher", 0.81, 0.19, AMB],
+    ["macro-strategist", 0.90, 0.10, GRN],
+    ["execution-trader", 0.88, 0.12, GRN],
+    ["risk-officer", 0.97, 0.03, GRN],
+  ];
+  mono(s, "데스크", { x: M + 0.24, y: 2.36, w: 2.2, h: 0.22, fontSize: 9, color: DIM });
+  mono(s, "게이트 통과율", { x: M + 2.5, y: 2.36, w: 2.6, h: 0.22, fontSize: 9, color: DIM });
+  mono(s, "반려", { x: M + 5.3, y: 2.36, w: 0.8, h: 0.22, fontSize: 9, color: DIM, align: "right" });
+  sc.forEach((r, i) => {
+    const y = 2.62 + i * 0.38;
+    mono(s, r[0], { x: M + 0.24, y, w: 2.2, h: 0.3, fontSize: 9.5, color: INK, valign: "middle" });
+    pxBar(s, M + 2.5, y + 0.09, 2.6, 0.14, r[1], r[3]);
+    mono(s, Math.round(r[2] * 100) + "%", { x: M + 5.3, y, w: 0.8, h: 0.3, fontSize: 9.5, bold: true, color: r[3], align: "right", valign: "middle" });
+  });
+  txt(s, "quant 의 반려 19% 는 대부분 limits 누락이다 — 프롬프트가 아니라 스킬 문서를 고쳐야 한다는 신호다.", {
+    x: M + 0.24, y: 4.50, w: 5.85, h: 0.3, fontSize: 9, italic: true, color: AMB });
+
+  const metrics = [["재현 성공률", "82%", "이번 주 심사 통과분 기준", GRN],
+                   ["승격률 (T2→T3)", "4.1%", "데스크 간 이견이 주 원인", AMB],
+                   ["평균 stale_days", "1.3", "임계 3영업일 이내", CYN],
+                   ["은퇴 논문 누계", "6편", "재현 2회 연속 실패", MAG]];
+  metrics.forEach((m, i) => {
+    const x = 7.1 + (i % 2) * 2.86, y = 1.86 + Math.floor(i / 2) * 1.54;
+    panel(s, { x, y, w: 2.72, h: 1.42, fill: PANEL, line: EDGE });
+    mono(s, m[1], { x: x + 0.18, y: y + 0.16, w: 2.36, h: 0.42, fontSize: 23, bold: true, color: m[3] });
+    txt(s, m[0], { x: x + 0.18, y: y + 0.62, w: 2.36, h: 0.24, fontSize: 10.5, bold: true, color: INK });
+    txt(s, m[2], { x: x + 0.18, y: y + 0.88, w: 2.4, h: 0.42, fontSize: 9, color: MUT });
+  });
+
+  panel(s, { x: M, y: 5.02, w: CW, h: 1.8, fill: PANEL3, line: EDGE });
+  txt(s, "리플레이 — 왜 그렇게 읽었는가를 되짚는다", { x: M + 0.26, y: 5.16, w: 6.0, h: 0.3, fontSize: 14, bold: true, color: GLD });
+  const rp = [
+    ["봉투에 instance ID 가 있다", "어느 인스턴스가 어떤 입력으로 만든 문장인지 특정된다."],
+    ["인스턴스는 무상태다", "같은 입력을 다시 넣으면 같은 봉투가 나와야 한다 — 안 나오면 그것이 신호다."],
+    ["논문 원장은 append-only", "그날의 재현 판정이 남아 있어, 지금 기준이 아니라 그때 기준으로 되짚을 수 있다."],
+  ];
+  rp.forEach((r, i) => {
+    const x = M + 0.26 + i * 4.03;
+    s.addImage({ data: img("ic_ok"), x, y: 5.58, w: 0.18, h: 0.18 });
+    txt(s, r[0], { x: x + 0.26, y: 5.52, w: 3.6, h: 0.28, fontSize: 11.5, bold: true, color: INK });
+    txt(s, r[1], { x: x + 0.26, y: 5.82, w: 3.62, h: 0.8, fontSize: 9.5, color: MUT });
+  });
+}
+
+/* ═══════════ 17. 하루 운영 (동적) ═══════════ */
+{
+  const s = slide();
+  header(s, "A DAY", "하루 — 기존 자동 실행 시각은 그대로 쓴다",
+         "SCHEDULE.cmd 의 07:30 · 08:50 · 16:10 을 바꾸지 않는다. 그 사이에 소집·게이트·조립을 끼워 넣는다.");
+
+  const stops = [
+    ["07:30", "수확 · 재현 배치", ["arXiv·S2·OpenAlex·Crossref 훑기", "재검 기한 도래분 재현 실행", "채택 최대 1편 · 은퇴 판정"], "배치 (에이전트 아님)", CYN],
+    ["08:50", "리포트 + 소집", ["리포트 생성 (기존 그대로)", "트리거 스캔 → 인스턴스 생성", "데스크 병렬 작업 · 봉투 제출"], "spawn ~50", GRN],
+    ["09:00\n~15:30", "장중 (읽기만)", ["KIS 스냅샷은 화면에만", "원장에 쓰지 않는다", "데스크는 돌지 않는다"], "standing only", PUR],
+    ["16:10", "종가 적재", ["그날의 유일한 원장 쓰기", "catchup 으로 영업일 채움", "stale_days 갱신"], "data-ops 단독", AMB],
+    ["17:00", "게이트 → 조립", ["risk 검산 → compliance 판정", "통과분만 ic-chair 로", "반려분은 사유와 함께 남는다"], "발행", GLD],
+  ];
+  const bw = 2.36, bg = 0.12;
+  stops.forEach((st, i) => {
+    const x = M + i * (bw + bg);
+    panel(s, { x, y: 1.9, w: bw, h: 0.62, fill: st[4], line: null });
+    mono(s, st[0], { x, y: 1.9, w: bw, h: 0.62, fontSize: st[0].indexOf("\n") >= 0 ? 13 : 19, bold: true, color: "0D1018", align: "center", valign: "middle" });
+    panel(s, { x, y: 2.62, w: bw, h: 3.16, fill: PANEL, line: EDGE });
+    txt(s, st[1], { x: x + 0.16, y: 2.78, w: bw - 0.32, h: 0.56, fontSize: 13, bold: true, color: INK });
+    st[2].forEach((t, j) => {
+      s.addShape(pres.ShapeType.rect, { x: x + 0.18, y: 3.5 + j * 0.62, w: 0.08, h: 0.08, fill: { color: st[4] }, line: { type: "none" } });
+      txt(s, t, { x: x + 0.36, y: 3.42 + j * 0.62, w: bw - 0.54, h: 0.56, fontSize: 9.5, color: MUT });
+    });
+    s.addShape(pres.ShapeType.rect, { x: x + 0.16, y: 5.3, w: bw - 0.32, h: 0.32, fill: { color: PANEL2 }, line: { type: "none" } });
+    mono(s, st[3], { x: x + 0.16, y: 5.3, w: bw - 0.32, h: 0.32, fontSize: 8.8, bold: true, color: st[4], align: "center", valign: "middle" });
+  });
+
+  panel(s, { x: M, y: 5.96, w: CW, h: 0.86, fill: PANEL3, line: EDGE });
+  txt(s, [
+    { text: "장중에 데스크를 돌리지 않는 이유 — ", options: { bold: true, color: AMB } },
+    { text: "일봉 장부 위에 세운 해석을 장중 값과 섞으면 무엇을 근거로 읽었는지가 시각마다 달라진다. 하루 한 번, 같은 기준일 위에서만 읽는다.\n", options: { color: INK } },
+    { text: "재현을 07:30 배치로 두는 이유 — ", options: { bold: true, color: CYN } },
+    { text: "재현은 판단이 아니라 계산이다. 에이전트가 아니라 결정적 코드가 돌려야 매번 같은 답이 나온다.", options: { color: INK } },
+  ], { x: M + 0.26, y: 5.96, w: CW - 0.52, h: 0.86, fontSize: 10.5, valign: "middle", lineSpacing: 17, fontFace: F, isTextBox: true, margin: 0 });
+}
+
+/* ═══════════ 18. 로드맵 ═══════════ */
+{
+  const s = slide();
+  header(s, "ROADMAP", "10주 — 재현 관문을 먼저 세우고 그 위에 소집을 얹는다",
+         "논문 파이프라인이 먼저다. 재현되지 않은 방법론 위에 에이전트를 아무리 많이 띄워도 의미가 없다.");
+
+  const ph = [
+    ["P1", "W1–2", "논문 원장", ["ki.papers/2 스키마 전환", "state · replication · 반감기 필드", "기존 12편을 원장 형식으로 이관", "ledger.papers MCP 도구"], CYN],
+    ["P2", "W3–4", "재현 관문", ["팩터 재현 러너 (결정적 코드)", "12편 소급 재현 → 판정 기록", "재현 실패분 warned 처리", "게이트 ③ 코드화"], GRN],
+    ["P3", "W5–6", "수확 상시화", ["fetch_papers 주간 스케줄", "심사 → 재현 → 채택 연결", "감가·은퇴 배치", "주 2편 채택 목표 검증"], AMB],
+    ["P4", "W7–8", "동적 소집", ["트리거 스캐너", "인스턴스 생성·예산·소멸", "T1~T3 에스컬레이션", "봉투 v2 · instance ID"], PUR],
+    ["P5", "W9–10", "병행 운영", ["사람 산출과 2주 대조", "스코어카드 · 리플레이", "불일치 원인 전수 분석", "전환 여부는 사람이 결정"], MAG],
+  ];
+  const pw = 2.36, pg = 0.12;
+  ph.forEach((p, i) => {
+    const x = M + i * (pw + pg);
+    panel(s, { x, y: 1.88, w: pw, h: 0.46, fill: p[4], line: null });
+    mono(s, p[0] + "  ·  " + p[1], { x, y: 1.88, w: pw, h: 0.46, fontSize: 10.5, bold: true, color: "0D1018", align: "center", valign: "middle" });
+    panel(s, { x, y: 2.44, w: pw, h: 3.3, fill: PANEL, line: EDGE });
+    txt(s, p[2], { x: x + 0.16, y: 2.6, w: pw - 0.32, h: 0.6, fontSize: 15, bold: true, color: p[4] });
+    p[3].forEach((t, j) => {
+      s.addShape(pres.ShapeType.rect, { x: x + 0.18, y: 3.32 + j * 0.62, w: 0.08, h: 0.08, fill: { color: p[4] }, line: { type: "none" } });
+      txt(s, t, { x: x + 0.36, y: 3.24 + j * 0.62, w: pw - 0.54, h: 0.56, fontSize: 9.5, color: INK });
+    });
+  });
+
+  const outs = [["P2 종료", "12편이 코스닥에서 성립하는지 처음으로 알게 된다", GRN],
+                ["P3 종료", "손을 대지 않아도 채택본이 갱신된다", AMB],
+                ["P5 종료", "병행 2주 결과로 전환 여부를 사람이 결정한다", MAG]];
+  outs.forEach((o, i) => {
+    const x = M + i * 4.11;
+    panel(s, { x, y: 5.94, w: 3.94, h: 0.76, fill: PANEL3, line: EDGE });
+    mono(s, o[0], { x: x + 0.2, y: 6.04, w: 3.5, h: 0.24, fontSize: 10, bold: true, color: o[2] });
+    txt(s, o[1], { x: x + 0.2, y: 6.28, w: 3.56, h: 0.36, fontSize: 10, color: INK });
+  });
+}
+
+/* ═══════════ 19. 착수 + KPI ═══════════ */
+{
+  const s = slide();
+  for (let i = 0; i < 42; i++) s.addShape(pres.ShapeType.rect, {
+    x: 0, y: i * 0.18, w: W, h: 0.03, fill: { color: "121826" }, line: { type: "none" },
+  });
+  mono(s, "▚ NEXT STEP", { x: M, y: 0.46, w: CW, h: 0.26, fontSize: 11, bold: true, color: AMB, charSpacing: 1.5 });
+  txt(s, "이번 주에 할 것과, 무엇으로 성공을 판정할 것인가", {
+    x: M, y: 0.76, w: CW, h: 0.56, fontSize: 28, bold: true, color: INK });
+
+  const todo = [
+    ["재현 가능한 주장으로 12편을 환원", "각 논문에서 방향이 있는 한 문장을 뽑는다. 환원 안 되는 논문은 재현 대상에서 뺀다.", "W1", GRN],
+    ["ki.papers/2 스키마 확정", "state · replication · half_life · limits. 코드보다 먼저 한 장으로 합의한다.", "W1", CYN],
+    ["재현 러너 골격", "팩터 하나(amihud2002)만 먼저. 원장 일봉으로 분위 스프레드 부호를 본다.", "W2", AMB],
+    ["12편 소급 재현", "몇 편이 코스닥에서 살아남는지 실제로 센다. 이 숫자가 이 방안의 출발점이다.", "W2", PUR],
+    ["트리거 발생률 역산", "원장의 공시·변동 이력으로 실제 소집 건수를 계산한다. 가정값을 실측으로 바꾼다.", "W2", MAG],
+  ];
+  todo.forEach((t, i) => {
+    const y = 1.62 + i * 0.94;
+    panel(s, { x: M, y, w: 7.7, h: 0.82, fill: PANEL, line: EDGE });
+    s.addShape(pres.ShapeType.rect, { x: M + 0.18, y: y + 0.19, w: 0.44, h: 0.44, fill: { color: t[3] }, line: { type: "none" } });
+    mono(s, String(i + 1), { x: M + 0.18, y: y + 0.19, w: 0.44, h: 0.44, fontSize: 14, bold: true, color: "0D1018", align: "center", valign: "middle" });
+    txt(s, t[0], { x: M + 0.78, y: y + 0.11, w: 5.4, h: 0.28, fontSize: 12.5, bold: true, color: INK });
+    txt(s, t[1], { x: M + 0.78, y: y + 0.41, w: 5.8, h: 0.32, fontSize: 9.5, color: MUT });
+    mono(s, t[2], { x: M + 6.62, y: y + 0.11, w: 0.9, h: 0.28, fontSize: 11, bold: true, color: t[3], align: "right" });
+  });
+
+  mono(s, "성공 판정 지표", { x: 8.6, y: 1.62, w: 4.1, h: 0.28, fontSize: 12, bold: true, color: AMB, charSpacing: 1 });
+  const kpi = [["?편", "12편 중 코스닥 재현 통과", "이 숫자를 모르는 채로 쓰고 있었다", GRN],
+               ["≥2편/주", "신규 채택 유입", "손대지 않아도 갱신되는가", CYN],
+               ["0건", "미재현 논문 인용", "게이트 ③ 반려 건수", AMB],
+               ["-80%", "에이전트 부하", "같은 커버리지 기준", MAG]];
+  kpi.forEach((k, i) => {
+    const y = 2.02 + i * 1.16;
+    mono(s, k[0], { x: 8.6, y, w: 4.1, h: 0.44, fontSize: 25, bold: true, color: k[3] });
+    txt(s, k[1], { x: 8.6, y: y + 0.46, w: 4.1, h: 0.24, fontSize: 11, bold: true, color: INK });
+    txt(s, k[2], { x: 8.6, y: y + 0.7, w: 4.1, h: 0.24, fontSize: 9, color: MUT });
+  });
+
+  panel(s, { x: M, y: 6.32, w: 7.7, h: 0.5, fill: "16281C", line: "2A5A3A" });
+  txt(s, "가장 먼저 알아야 할 것은 \"12편 중 몇 편이 우리 시장에서 살아있는가\" 다.", {
+    x: M + 0.24, y: 6.32, w: 7.3, h: 0.5, fontSize: 11, bold: true, color: GRN, valign: "middle" });
+  mono(s, "내부 검토용 · 대외비 · 투자권유 자료 아님 · 계획안", {
+    x: M, y: 7.00, w: 8.0, h: 0.28, fontSize: 9, color: DIM });
+}
+
+pres.writeFile({ fileName: process.argv[2] || "deck2.pptx" })
+  .then(f => console.log("WROTE " + f))
+  .catch(e => { console.error(e); process.exit(1); });

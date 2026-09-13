@@ -44,6 +44,7 @@ trading-floor/.ki-cache/
 # ── 사내 원본 자료 ───────────────────────────────────────────────
 *.pptx
 !docs/agentization/*.pptx
+!docs/agentization/**/*.pptx
 *.xlsx
 *.hwp
 
