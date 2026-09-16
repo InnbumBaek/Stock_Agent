@@ -349,22 +349,20 @@ function sLedger() {
 
 function sStandingSpawn() {
   const s = slide();
-  header(s, "PART 3 · DYNAMIC AGENTS", "상설은 다섯뿐이다. 나머지 열다섯은 불릴 때만 온다.",
-         "조직도를 고정하지 않는다. 스무 데스크를 매일 전부 돌리는 대신, 그날 실제로 무언가 일어난 곳에만 에이전트를 띄운다.");
+  header(s, "PART 3 · DYNAMIC AGENTS", "상설은 셋뿐이다. 나머지 여섯은 불릴 때만 온다.",
+         "조직도를 고정하지 않는다. 아홉 데스크를 매일 전부 돌리는 대신, 그 질문의 답이 달라졌을 때만 띄운다.");
 
   panel(s, { x: M, y: 1.82, w: 4.4, h: 4.3, fill: PANEL, line: GRN });
-  mono(s, "STANDING  ·  상설 5", { x: M + 0.24, y: 1.98, w: 3.9, h: 0.26, fontSize: 11, bold: true, color: GRN });
+  mono(s, "STANDING  ·  상설 3", { x: M + 0.24, y: 1.98, w: 3.9, h: 0.26, fontSize: 11, bold: true, color: GRN });
   txt(s, "항상 떠 있다. 하루의 리듬을 만든다.", { x: M + 0.24, y: 2.26, w: 3.9, h: 0.24, fontSize: 10, color: MUT });
   const standing = [
-    ["ag_dataops", "ingest-ops", "원장 적재 — 그날의 유일한 쓰기", "쓰기 단독", GRN],
-    ["ag_dataops", "data-quality", "stale · 결측 · 필드매핑 감시", "§10", GRN],
-    ["ag_quant", "factor-librarian", "논문 원장 상태 관리", "배치와 함께", PUR],
-    ["ag_compliance", "compliance-officer", "게이트 판정 · 발행 승인", "거부권", ORG],
-    ["ag_chair", "ic-chair", "봉투 수집 · 쟁점 정렬", "조립만", GLD],
+    ["ag_dataops", "data-ops", "원장 적재 · 품질 — 그날의 유일한 쓰기", "쓰기 단독", GRN],
+    ["ag_compliance", "compliance-officer", "일곱 게이트 판정 · 발행 승인", "거부권", ORG],
+    ["ag_chair", "ic-chair", "봉투 수집 · 쟁점 정렬 · 조립", "조립만", GLD],
   ];
   standing.forEach((a, i) => {
-    const y = 2.60 + i * 0.7;
-    panel(s, { x: M + 0.22, y, w: 3.96, h: 0.62, fill: PANEL2, line: EDGE, off: 0 });
+    const y = 2.70 + i * 0.86;
+    panel(s, { x: M + 0.22, y, w: 3.96, h: 0.74, fill: PANEL2, line: EDGE, off: 0 });
     s.addImage({ data: img(a[0]), x: M + 0.32, y: y + 0.09, w: 0.44, h: 0.44 });
     mono(s, a[1], { x: M + 0.84, y: y + 0.06, w: 2.3, h: 0.22, fontSize: 9, bold: true, color: INK });
     txt(s, a[2], { x: M + 0.84, y: y + 0.28, w: 2.4, h: 0.26, fontSize: 8.5, color: MUT });
@@ -372,18 +370,13 @@ function sStandingSpawn() {
   });
 
   panel(s, { x: 5.32, y: 1.82, w: 7.41, h: 4.3, fill: PANEL, line: AMB });
-  mono(s, "SPAWNED  ·  이벤트 소집 15 역할 × N 인스턴스", { x: 5.56, y: 1.98, w: 6.9, h: 0.26, fontSize: 11, bold: true, color: AMB });
+  mono(s, "SPAWNED  ·  이벤트 소집 6 역할 × N 인스턴스", { x: 5.56, y: 1.98, w: 6.9, h: 0.26, fontSize: 11, bold: true, color: AMB });
   txt(s, "트리거가 뜰 때만 인스턴스가 생기고, 봉투를 내면 사라진다. 상태를 들고 있지 않으므로 같은 입력이면 같은 결과가 나온다.", {
     x: 5.56, y: 2.26, w: 6.9, h: 0.24, fontSize: 10, color: MUT });
   const spawned = [
-    ["equity-analyst", "공시 1건", BLU], ["credit-analyst", "사채·CB 공시", BLU],
-    ["governance-analyst", "지분 공시", BLU], ["capital-structure", "분기 공시", BLU],
-    ["quant-researcher", "재현 1편", PUR], ["macro-strategist", "지표 갱신", CYN],
-    ["return-analyst", "배당 공시", BLU], ["execution-trader", "계획 변동", AMB],
-    ["liquidity-analyst", "±8% 변동", AMB], ["market-risk", "봉투 묶음", MAG],
-    ["concentration-risk", "포지션 변동", MAG], ["model-risk ★", "재현 설계", MAG],
-    ["internal-audit", "주간", ORG], ["disclosure-control", "발행 직전", ORG],
-    ["research-editor", "조립 직전", GLD],
+    ["q1-progress", "진척 변동", CYN], ["q2-disposal", "처분여건 변동", GRN],
+    ["q3-execution", "q2 봉투 갱신", AMB], ["q4-timing", "공시 · 일정", MAG],
+    ["quant-method", "주간 재현", PUR], ["risk-officer", "봉투 묶음", MAG],
   ];
   spawned.forEach((a, i) => {
     const x = 5.56 + (i % 3) * 2.36, y = 2.60 + Math.floor(i / 3) * 0.7;
@@ -397,7 +390,7 @@ function sStandingSpawn() {
   panel(s, { x: M, y: 6.28, w: CW, h: 0.6, fill: PANEL3, line: EDGE });
   txt(s, [
     { text: "왜 소집인가 —  ", options: { bold: true, color: AMB } },
-    { text: "역할이 20개로 늘면 전수 실행은 더 나빠진다 — 85종목 × 종목단위 7데스크 = 595회다. 어제와 달라진 것이 없는 종목을 다시 읽는 것은 같은 답을 다시 사는 일이다. 역할을 늘릴수록 소집이 더 중요해진다.", options: { color: INK } },
+    { text: "85종목 × 종목단위 3데스크를 매일 돌리면 255회다. 어제와 달라진 것이 없는 종목을 다시 읽는 것은 같은 답을 다시 사는 일이다. 질문의 답이 달라진 곳에만 예산을 쓴다.", options: { color: INK } },
   ], { x: M + 0.26, y: 6.28, w: CW - 0.52, h: 0.6, fontSize: 11, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
 
@@ -483,12 +476,12 @@ function sLoad() {
 
   panel(s, { x: M, y: 1.84, w: 8.3, h: 4.3, fill: PANEL, line: EDGE });
   txt(s, "일별 에이전트 인스턴스 수", { x: M + 0.26, y: 1.98, w: 5.0, h: 0.3, fontSize: 14, bold: true, color: INK });
-  txt(s, "가정 — 감시 85종목 · 종목단위 데스크 7 · 공시 발생률 6% · ±8% 변동 발생률 4%", {
+  txt(s, "가정 — 감시 85종목 · 종목단위 데스크 3 (q1·q2·q3) · 공시 발생률 6% · ±8% 변동 발생률 4%", {
     x: M + 0.26, y: 2.28, w: 7.6, h: 0.22, fontSize: 9.5, color: DIM });
   const days = Array.from({ length: 20 }, (_, i) => "D" + (i + 1));
   s.addChart(pres.ChartType.line, [
-    { name: "전수 실행 (85×7)", labels: days, values: Array(20).fill(595) },
-    { name: "이벤트 소집", labels: days, values: [64,88,74,103,59,83,148,69,96,78,121,66,93,108,72,86,79,162,98,74] },
+    { name: "전수 실행 (85×3)", labels: days, values: Array(20).fill(255) },
+    { name: "이벤트 소집", labels: days, values: [28,38,32,44,26,36,64,30,42,34,52,29,40,47,31,37,34,70,42,32] },
   ], {
     x: M + 0.2, y: 2.6, w: 7.9, h: 3.3,
     chartColors: [C4, C1], lineDataSymbol: "none", lineSize: 3,
@@ -496,12 +489,12 @@ function sLoad() {
     catAxisLabelColor: DIM, catAxisLabelFontSize: 8, catAxisLabelFontFace: FM, catAxisLineShow: false,
     valAxisLabelColor: MUT, valAxisLabelFontSize: 9, valAxisLabelFontFace: FM, valAxisLineShow: false,
     valGridLine: { color: "2A3350", size: 1 }, catGridLine: { style: "none" },
-    valAxisMinVal: 0, valAxisMaxVal: 700,
+    valAxisMinVal: 0, valAxisMaxVal: 300,
     plotArea: { fill: { color: PANEL } }, chartArea: { fill: { color: PANEL } },
   });
 
-  const st = [["11,900", "전수 · 20일 누계", "인스턴스", C4], ["1,821", "이벤트 · 20일 누계", "인스턴스", C1],
-              ["-85%", "부하 감소", "같은 커버리지", GRN], ["162", "최대 피크일", "D18 · 공시 집중", AMB]];
+  const st = [["5,100", "전수 · 20일 누계", "인스턴스", C4], ["788", "이벤트 · 20일 누계", "인스턴스", C1],
+              ["-85%", "부하 감소", "같은 커버리지", GRN], ["70", "최대 피크일", "D18 · 공시 집중", AMB]];
   st.forEach((t, i) => {
     const y = 1.84 + i * 1.11;
     panel(s, { x: 9.12, y, w: 3.61, h: 0.99, fill: PANEL, line: EDGE });
@@ -513,7 +506,7 @@ function sLoad() {
   panel(s, { x: M, y: 6.3, w: CW, h: 0.58, fill: PANEL3, line: EDGE });
   txt(s, [
     { text: "핵심은 절감이 아니라 피크다. ", options: { bold: true, color: AMB } },
-    { text: "전수 방식은 조용한 날에도 595를 쓰느라, 정작 공시가 몰린 날(D18)에 더 깊이 볼 여력이 없다. 이벤트 방식은 그날 예산을 그날 일에 쓴다.", options: { color: INK } },
+    { text: "전수 방식은 조용한 날에도 255를 쓰느라, 정작 공시가 몰린 날(D18)에 더 깊이 볼 여력이 없다. 이벤트 방식은 그날 예산을 그날 일에 쓴다.", options: { color: INK } },
   ], { x: M + 0.26, y: 6.3, w: CW - 0.52, h: 0.58, fontSize: 11, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
   foot(s, "// 발생률은 가정값이다. 실측은 Phase 1 에서 원장의 공시·변동 이력으로 역산한다.");
 }
@@ -870,7 +863,7 @@ function sExec() {
 
   const rows = [
     ["바꾼다", "주 1회 새 논문을 들여와 통과 테스트를 돌린다", "수확 → 심사 → 재현 → 채택이 매주 한 번 돈다. 반감기가 도래한 기존 채택본도 같은 사이클에서 재검된다.", GRN],
-    ["바꾼다", "에이전트를 고정 8데스크로 두지 않는다", "이벤트가 뜰 때만 소집됐다가 봉투를 내고 사라진다. 그날 변동분만 돈다.", CYN],
+    ["바꾼다", "질문마다 데스크 하나 — 아홉으로 나눈다", "네 질문(q1~q4) 각각에 담당을 두고, 그 질문의 답이 달라졌을 때만 소집한다.", CYN],
     ["지킨다", "원장(ki.sqlite)은 여전히 사실만 담는다", "에이전트에게 쓰기 도구를 아예 주지 않는다. 규칙이 아니라 구조로 막는다.", AMB],
     ["지킨다", "판단은 여전히 회의에서 사람이 한다", "점수·등급·매매 시그널을 만들지 않는다. 올라가는 것은 쟁점이지 결론이 아니다.", PUR],
   ];
@@ -910,7 +903,7 @@ function sAgenda() {
   const parts = [
     ["PART 1", "지금", ["현재 자산 진단", "왜 에이전트화인가", "깨면 안 되는 다섯 가지", "★ 리픽싱 · 희석 ≠ 권리락", "처분 여건"], "측정은 이미 된다. 문제는 독해다.", CYN],
     ["PART 2", "논문을 살린다", ["12편은 스냅샷이다", "주 1회 파이프라인 5단계", "★ 재현 관문", "감가 · 은퇴", "논문 원장 스키마"], "인용하기 전에 우리 데이터로 계산한다.", GRN],
-    ["PART 3", "조직과 에이전트", ["목표 조직도 — 20 데스크", "★ 절 매핑 (수의 근거)", "데스크 카탈로그 3장", "상설 5 vs 소집 15", "트리거 · 부하 · 승격"], "데스크 수는 CATALOG 가 정한다.", AMB],
+    ["PART 3", "조직과 에이전트", ["★ 질문이 데스크를 정한다", "목표 조직도 — 9 데스크", "데스크 카탈로그 2장", "상설 3 vs 소집 6", "조달 · 트리거 · 부하"], "네 질문이 조직을 정한다.", AMB],
     ["PART 4", "통제", ["정보교류차단", "권한 매트릭스", "봉투 스키마", "일곱 게이트 · 스코어카드"], "벽은 규칙이 아니라 구조다.", MAG],
     ["PART 5", "실행", ["기술 스택 · MCP 설계", "하루 운영 · 로드맵", "리스크 · 착수와 KPI"], "기존 코드는 한 줄도 고치지 않는다.", PUR],
   ];
@@ -1058,37 +1051,26 @@ function sRbac() {
 
   const cols = ["원장 읽기", "원장 쓰기", "외부 API", "KIS 주문", "회의자료 발행", "거부권"];
   const M_ = [
-    ["equity-analyst",     ["●","✕","△ 원문만","✕","✕","✕"]],
-    ["credit-analyst",     ["●","✕","△ 원문만","✕","✕","✕"]],
-    ["governance-analyst", ["●","✕","△ 원문만","✕","✕","✕"]],
-    ["capital-structure",  ["●","✕","✕","✕","✕","✕"]],
-    ["quant-researcher",   ["●","✕","△ 논문 4곳","✕","✕","✕"]],
-    ["macro-strategist",   ["●","✕","✕","✕","✕","✕"]],
-    ["return-analyst",     ["●","✕","✕","✕","✕","✕"]],
-    ["execution-trader",   ["●","✕","✕","✕","✕","✕"]],
-    ["liquidity-analyst",  ["●","✕","✕","✕","✕","✕"]],
-    ["market-risk",        ["●","✕","✕","✕","✕","●"]],
-    ["concentration-risk", ["●","✕","✕","✕","✕","●"]],
-    ["model-risk ★",       ["●","✕","✕","✕","✕","●"]],
+    ["q1-progress",        ["●","✕","✕","✕","✕","✕"]],
+    ["q2-disposal",        ["●","✕","△ 원문만","✕","✕","✕"]],
+    ["q3-execution",       ["●","✕","✕","✕","✕","✕"]],
+    ["q4-timing",          ["●","✕","△ 원문만","✕","✕","✕"]],
+    ["quant-method",       ["●","✕","△ 논문 4곳","✕","✕","✕"]],
+    ["risk-officer",       ["●","✕","✕","✕","✕","●"]],
     ["compliance-officer", ["●","✕","✕","✕","●","●"]],
-    ["internal-audit",     ["●","✕","✕","✕","✕","✕"]],
-    ["disclosure-control", ["●","✕","✕","✕","● 배포","✕"]],
-    ["ingest-ops",         ["●","●","● 5종 전부","✕","✕","✕"]],
-    ["data-quality",       ["●","✕","✕","✕","✕","✕"]],
-    ["factor-librarian",   ["●","✕","✕","✕","✕","✕"]],
-    ["research-editor",    ["●","✕","✕","✕","✕","✕"]],
+    ["data-ops",           ["●","●","● 5종 전부","✕","✕","✕"]],
     ["ic-chair",           ["●","✕","✕","✕","△ 초안만","✕"]],
   ];
-  const head = [{ text: "에이전트", options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 8.5, align: "left", fontFace: FM } }]
-    .concat(cols.map(c => ({ text: c, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 8.5, align: "center", fontFace: F } })));
+  const head = [{ text: "에이전트", options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10.5, align: "left", fontFace: FM } }]
+    .concat(cols.map(c => ({ text: c, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10, align: "center", fontFace: F } })));
   const body = [head];
   M_.forEach(([k, vs], i) => {
     const bg = i % 2 ? PANEL3 : PANEL;
-    const row = [{ text: k, options: { bold: true, color: INK, fontSize: 7.8, align: "left", valign: "middle", fontFace: FM, fill: { color: bg } } }];
+    const row = [{ text: k, options: { bold: true, color: INK, fontSize: 10, align: "left", valign: "middle", fontFace: FM, fill: { color: bg } } }];
     vs.forEach(v => {
       const yes = v.indexOf("●") === 0, no = v === "✕";
       row.push({ text: v, options: {
-        fontSize: no ? 8.5 : 7.4, bold: yes, align: "center", valign: "middle",
+        fontSize: no ? 11 : 9.5, bold: yes, align: "center", valign: "middle",
         color: no ? "44506B" : (yes ? GRN : AMB),
         fill: { color: no ? bg : (yes ? "13241A" : "241E10") },
       }});
@@ -1098,12 +1080,12 @@ function sRbac() {
   s.addTable(body, {
     x: M, y: 1.82, w: CW, colW: [2.62, 1.28, 1.28, 1.85, 1.28, 1.62, 1.16],
     border: { type: "solid", color: EDGE, pt: 1 },
-    fontFace: F, rowH: 0.19, margin: 0.03, autoPage: false,
+    fontFace: F, rowH: 0.40, margin: 0.07, autoPage: false,
   });
 
   const boxes = [
     ["외부 API 는 ingest-ops 뿐", "데스크는 네트워크를 쓰지 않는다. 실시간 호출을 허용하면 데스크마다 다른 시각의 값을 보게 되고 기준일이 깨진다.", MAG],
-    ["원장 쓰기는 한 칸뿐", "ingest-ops 만 ●. 나머지 열아홉은 MCP 읽기 도구만 받는다. 역할이 20개로 늘어도 이 칸은 하나다.", GRN],
+    ["원장 쓰기는 한 칸뿐", "data-ops 만 ●. 나머지 여덟은 MCP 읽기 도구만 받는다. 데스크가 몇이든 이 칸은 하나다.", GRN],
     ["△ 는 DART 원문 조회뿐", "수치는 전부 원장에서 읽는다. 밖으로 나가는 것은 접수번호로 지정된 공시 문서 한 건을 열 때뿐이다 — 검색이 아니다.", AMB],
   ];
   boxes.forEach((b, i) => {
@@ -1124,7 +1106,7 @@ function sStack() {
 
   const layers = [
     ["의결", "ic-chair 오케스트레이터", "Claude Agent SDK · 서브에이전트 팬아웃/팬인", "게이트 통과분만 조립", GLD],
-    ["데스크", ".claude/agents/*.md  20개 (본부별 폴더)", "에이전트별 시스템 프롬프트 · 허용 도구 목록 · 담당 절", "도구 목록이 곧 권한", BLU],
+    ["데스크", ".claude/agents/*.md  9개", "에이전트별 시스템 프롬프트 · 허용 도구 목록 · 담당 절", "도구 목록이 곧 권한", BLU],
     ["지식", ".claude/skills/  5종", "source-grading · envelope-schema · paper-adoption · replication · compliance-gate", "규칙을 프롬프트에 흩지 않는다", PUR],
     ["도구", "MCP 서버  ki-ledger (stdio · Python)", "ki_monitor.py 의 읽기 명령만 감싼 8개 도구. 쓰기 도구 없음", "벽이 세워지는 지점", GRN],
     ["배치", "재현 러너 · 수확 · 감가", "결정적 코드. 에이전트가 아니라 스케줄러가 돌린다", "매번 같은 답이 나와야 한다", CYN],
@@ -1264,15 +1246,12 @@ function sAppendix() {
     '│   └─ triggers.py          트리거 스캐너 · 소집',
     '│',
     '└─ .claude/',
-    '    ├─ agents/              데스크 20개 정의 (본부별 폴더)',
-    '    │   ├─ research/     7  equity · credit · governance ·',
-    '    │   │                    capital-structure · quant ·',
-    '    │   │                    macro · return',
-    '    │   ├─ execution/    2  execution-trader · liquidity',
-    '    │   ├─ risk/         3  market · concentration · model ★',
-    '    │   ├─ compliance/   3  compliance · audit · disclosure',
-    '    │   ├─ operations/   3  ingest · quality · factor-librarian',
-    '    │   └─ ic/           2  research-editor · ic-chair',
+    '    ├─ agents/              데스크 9개 정의',
+    '    │   ├─ q1-progress.md    q2-disposal.md',
+    '    │   ├─ q3-execution.md   q4-timing.md',
+    '    │   ├─ quant-method.md   risk-officer.md',
+    '    │   ├─ compliance-officer.md',
+    '    │   └─ data-ops.md       ic-chair.md',
     '    ├─ skills/              규칙 5종',
     '    │   ├─ source-grading/     등급 판정 기준',
     '    │   ├─ envelope-schema/    봉투 작성법',
@@ -1300,216 +1279,10 @@ function sAppendix() {
 
 
 
-/* ═══ 20 데스크 로스터 (한 곳에서 정의) ═══ */
-const ROSTER = [
-  { unit: "리서치본부", sub: "RESEARCH", c: BLU, sprite: "ag_equity", desks: [
-    ["equity-analyst", "기업분석역", "§5 · §12"],
-    ["credit-analyst", "크레딧분석역", "§13 · §11"],
-    ["governance-analyst", "지배구조분석역", "§14 · §15"],
-    ["capital-structure", "자본구조분석역", "§6"],
-    ["quant-researcher", "계량분석역", "§16"],
-    ["macro-strategist", "매크로전략역", "§4 · §18"],
-    ["return-analyst", "수익률분석역", "§9"],
-  ]},
-  { unit: "트레이딩·집행", sub: "EXECUTION", c: AMB, sprite: "ag_exec", desks: [
-    ["execution-trader", "집행역", "§7"],
-    ["liquidity-analyst", "유동성분석역", "§8"],
-  ]},
-  { unit: "리스크관리본부", sub: "RISK", c: MAG, sprite: "ag_risk", veto: true, desks: [
-    ["market-risk", "시장리스크심사역", "§4"],
-    ["concentration-risk", "집중도심사역", "§2"],
-    ["model-risk ★", "모델리스크심사역", "재현 검증"],
-  ]},
-  { unit: "준법·감사", sub: "COMPLIANCE", c: ORG, sprite: "ag_compliance", veto: true, desks: [
-    ["compliance-officer", "준법감시역", "게이트 ①~⑦"],
-    ["internal-audit", "내부감사역", "§16 사후"],
-    ["disclosure-control", "배포통제역", "STAGE"],
-  ]},
-  { unit: "데이터·IT", sub: "OPERATIONS", c: GRN, sprite: "ag_dataops", write: true, desks: [
-    ["ingest-ops", "적재운영역", "원장 쓰기"],
-    ["data-quality", "품질관리역", "§10"],
-    ["factor-librarian", "팩터관리역", "논문 원장"],
-  ]},
-];
-
-/* ═══ 목표 조직도 — 20 데스크 ═══ */
-function sOrg() {
-  const s = slide();
-  header(s, "PART 3 · TARGET ORG", "대형 증권사 조직을 그대로 옮긴다 — 20 데스크",
-         "데스크 수는 야심이 아니라 CATALOG 가 정한다. 절마다 공급 데이터가 선언돼 있고, 데이터가 있는 절에만 담당을 둔다.");
-
-  const uw = 2.29, ug = 0.185;
-  ROSTER.forEach((u, i) => {
-    const x = M + i * (uw + ug);
-    panel(s, { x, y: 1.86, w: uw, h: 0.62, fill: u.c, line: null });
-    s.addImage({ data: img(u.sprite), x: x + 0.1, y: 1.94, w: 0.46, h: 0.46 });
-    txt(s, u.unit, { x: x + 0.62, y: 1.92, w: uw - 0.72, h: 0.26, fontSize: 11.5, bold: true, color: "0D1018" });
-    mono(s, u.sub, { x: x + 0.62, y: 2.16, w: uw - 0.72, h: 0.2, fontSize: 7.5, color: "0D1018", charSpacing: 1 });
-    u.desks.forEach((d, j) => {
-      const y = 2.58 + j * 0.44;
-      panel(s, { x, y, w: uw, h: 0.38, fill: PANEL, line: (u.veto || u.write) ? u.c : EDGE, off: 0 });
-      mono(s, d[0], { x: x + 0.1, y: y + 0.02, w: uw - 0.5, h: 0.18, fontSize: 7.4, bold: true, color: INK });
-      txt(s, d[1], { x: x + 0.1, y: y + 0.19, w: uw - 0.5, h: 0.17, fontSize: 7.6, color: MUT });
-      mono(s, d[2], { x: x + uw - 0.62, y, w: 0.54, h: 0.38, fontSize: 7, color: u.c, align: "right", valign: "middle" });
-    });
-    const by = 2.58 + u.desks.length * 0.44 + 0.02;
-    if (u.veto) mono(s, "거부권", { x, y: by, w: uw, h: 0.22, fontSize: 8.5, bold: true, color: GLD, align: "center" });
-    if (u.write) mono(s, "원장 쓰기 단독", { x, y: by, w: uw, h: 0.22, fontSize: 8.5, bold: true, color: GRN, align: "center" });
-  });
-
-  panel(s, { x: M, y: 5.70, w: CW, h: 0.72, fill: GLD, line: null });
-  txt(s, "의결  ·  투자심의위원회 (IC) — 사람이 결정한다", {
-    x: M + 0.24, y: 5.70, w: 4.6, h: 0.72, fontSize: 13, bold: true, color: "2E2408", valign: "middle" });
-  [["research-editor", "리서치에디터 · §1 · §3"], ["ic-chair", "간사 · 조립 · 쟁점 정렬"]].forEach((d, i) => {
-    const x = 5.6 + i * 3.6;
-    s.addShape(pres.ShapeType.rect, { x, y: 5.84, w: 3.4, h: 0.44, fill: { color: "2E2408" }, line: { type: "none" } });
-    mono(s, d[0], { x: x + 0.14, y: 5.86, w: 3.1, h: 0.2, fontSize: 8.5, bold: true, color: GLD });
-    txt(s, d[1], { x: x + 0.14, y: 6.05, w: 3.12, h: 0.2, fontSize: 8, color: "C8A24A" });
-  });
-
-  panel(s, { x: M, y: 6.54, w: CW, h: 0.5, fill: PANEL3, line: EDGE });
-  txt(s, [
-    { text: "8 → 20 으로 늘어도 인스턴스는 늘지 않는다. ", options: { bold: true, color: GRN } },
-    { text: "이벤트 소집이라 조용한 날에는 20개 중 두셋만 뜬다. 늘어나는 것은 역할이지 상시 부하가 아니다.", options: { color: INK } },
-  ], { x: M + 0.26, y: 6.54, w: CW - 0.52, h: 0.5, fontSize: 10.5, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
-}
-
-/* ═══ 신설 — 절 매핑 (데스크 수의 근거) ═══ */
-function sSectionMap() {
-  const s = slide();
-  header(s, "PART 3 · WHY 20", "데스크 수는 CATALOG 가 정한다",
-         "코드에 SECTIONS 18개가 선언돼 있고, CATALOG 31개 항목이 각각 어느 절로 가는지 이미 적혀 있다. 그 매핑이 곧 조직도다.");
-
-  const rows = [
-    ["§2", "포지션 현황 · 집중도", "krx.bydd.close · mktcap", "concentration-risk", MAG],
-    ["§3", "가격 · 벤치마크 대비", "krx.bydd.ohlc · krx.idx.close", "research-editor", GLD],
-    ["§4", "리스크 (변동성 · VaR · 상관)", "krx.bydd.high/low/close · idx.close", "market-risk", MAG],
-    ["§5", "재무 요약 (XBRL)", "dart.fs.revenue/op/net/assets/equity", "equity-analyst", BLU],
-    ["§6", "자본 구조 · 주주 구성", "ds002.stock_total · treasury · largest_pct", "capital-structure", BLU],
-    ["§8", "유동성 · 실행비용 · 미시구조", "krx.bydd.volume · value · kis.snap.*", "liquidity-analyst", AMB],
-    ["§9", "총수익률 · 배당 반영", "ds002.dividend_ps", "return-analyst", BLU],
-    ["§11", "규제 · 규약 · 희석 감시", "ds005.cb_amount · cb_conv_price", "credit-analyst", BLU],
-    ["§12", "공시 이벤트 · CAR", "ds001.rcept_dt", "equity-analyst", BLU],
-    ["§13", "사채 만기 · 자금 사용", "ds002.bond_balance", "credit-analyst", BLU],
-    ["§14", "지분 · 내부자 매매", "ds004.major_holder · exec_holder", "governance-analyst", BLU],
-    ["§15", "감사 · 지배구조 변동", "ds002.audit_opinion", "governance-analyst", BLU],
-    ["§16", "스코어카드", "dart.fs.op/net/assets/equity", "quant-researcher", PUR],
-  ];
-  const head = ["절", "무엇을 다루는가", "공급 데이터 (CATALOG)", "담당 데스크"].map((h, i) => ({
-    text: h, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10, valign: "middle", fontFace: FM,
-                        align: i === 0 ? "center" : "left" },
-  }));
-  const body = [head];
-  rows.forEach((r, i) => {
-    const bg = i % 2 ? PANEL3 : PANEL;
-    body.push([
-      { text: r[0], options: { bold: true, color: GLD, fontSize: 9.5, align: "center", valign: "middle", fontFace: FM, fill: { color: bg } } },
-      { text: r[1], options: { color: INK, fontSize: 9, valign: "middle", fill: { color: bg } } },
-      { text: r[2], options: { color: DIM, fontSize: 8, valign: "middle", fontFace: FM, fill: { color: bg } } },
-      { text: r[3], options: { bold: true, color: r[4], fontSize: 9, valign: "middle", fontFace: FM, fill: { color: bg } } },
-    ]);
-  });
-  s.addTable(body, {
-    x: M, y: 1.84, w: 8.5, colW: [0.62, 2.62, 3.16, 2.10],
-    border: { type: "solid", color: EDGE, pt: 1 },
-    fontFace: F, rowH: 0.295, margin: 0.05, autoPage: false,
-  });
-
-  panel(s, { x: 9.32, y: 1.84, w: 3.41, h: 2.3, fill: "24141B", line: "5C2A3A" });
-  txt(s, "데스크를 두지 않는 절", { x: 9.54, y: 1.98, w: 3.0, h: 0.28, fontSize: 12, bold: true, color: MAG });
-  [["§1", "오늘 달라진 것 — 파생"], ["§7", "회수단가 갭 — 사내 데이터"],
-   ["§10", "데이터 품질 — 메타"], ["§17", "펀드 지표 — 공급원 없음"],
-   ["§18", "이번 주 볼 것 — 캘린더"]].forEach((t, i) => {
-    mono(s, t[0], { x: 9.54, y: 2.36 + i * 0.32, w: 0.5, h: 0.26, fontSize: 9, bold: true, color: DIM });
-    txt(s, t[1], { x: 10.1, y: 2.34 + i * 0.32, w: 2.5, h: 0.28, fontSize: 9, color: MUT });
-  });
-
-  panel(s, { x: 9.32, y: 4.30, w: 3.41, h: 1.86, fill: "16281C", line: "2A5A3A" });
-  txt(s, "데이터 없는 절에는 데스크를 만들지 않는다", {
-    x: 9.54, y: 4.44, w: 3.0, h: 0.5, fontSize: 12, bold: true, color: GRN });
-  txt(s, "만들어 놓으면 \"뭐라도 말해야 하니까\" 없는 값을 지어낸다. §17 펀드 지표는 공급원이 없으므로 비워 둔다 — 이 프로젝트가 가장 경계하는 실패다.", {
-    x: 9.54, y: 4.98, w: 3.02, h: 1.06, fontSize: 9.5, color: INK });
-
-  panel(s, { x: M, y: 6.18, w: CW, h: 0.62, fill: PANEL3, line: EDGE });
-  txt(s, [
-    { text: "8 개는 근거가 없었다. ", options: { bold: true, color: AMB } },
-    { text: "§13 사채만기 · §14 지분 · §11 희석은 각각 별도 공급 데이터를 가진 독립된 절인데, 8 데스크 체제에서는 equity-analyst 하나가 전부 뭉뚱그려 읽게 돼 있었다.", options: { color: INK } },
-  ], { x: M + 0.26, y: 6.18, w: CW - 0.52, h: 0.62, fontSize: 10.5, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
-}
-
-/* ═══ 데스크 카탈로그 3장 ═══ */
-function deskTable(kicker, title, sub, rows, note) {
-  const s = slide();
-  header(s, kicker, title, sub);
-  const head = ["에이전트 · 직책", "담당 절", "무엇을 읽는가", "무엇을 내는가", "제약"].map(h => ({
-    text: h, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10, valign: "middle", fontFace: FM },
-  }));
-  const body = [head];
-  rows.forEach((r, i) => {
-    const bg = i % 2 ? PANEL3 : PANEL;
-    body.push([
-      { text: r[0], options: { bold: true, color: r[5], fontSize: 9.5, valign: "middle", fontFace: FM, fill: { color: bg } } },
-      { text: r[1], options: { bold: true, color: GLD, fontSize: 9, align: "center", valign: "middle", fontFace: FM, fill: { color: bg } } },
-      { text: r[2], options: { color: MUT, fontSize: 8.5, valign: "middle", fill: { color: bg } } },
-      { text: r[3], options: { color: INK, fontSize: 8.5, valign: "middle", fill: { color: bg } } },
-      { text: r[4], options: { color: DIM, fontSize: 8, italic: true, valign: "middle", fill: { color: bg } } },
-    ]);
-  });
-  s.addTable(body, {
-    x: M, y: 1.84, w: CW, colW: [2.32, 0.94, 2.86, 2.96, 3.05],
-    border: { type: "solid", color: EDGE, pt: 1 },
-    fontFace: F, rowH: 0.47, margin: 0.06, autoPage: false,
-  });
-  panel(s, { x: M, y: 6.14, w: CW, h: 0.7, fill: PANEL3, line: EDGE });
-  txt(s, note, { x: M + 0.26, y: 6.14, w: CW - 0.52, h: 0.7, fontSize: 10.5, color: INK, valign: "middle" });
-}
-
-function sDesk1() {
-  deskTable("PART 3 · CATALOG 1/3", "리서치본부 — 일곱 데스크",
-    "한 데스크가 한 절을 읽는다. 담당 범위 밖은 읽지 않으므로, 읽지 않은 것에 대해 말할 여지가 없다.",
-    [
-      ["equity-analyst\n기업분석역", "§5 · §12", "dart.fs.* · ds001.rcept_dt\n공시 원문 링크", "재무 요약 해설\n공시 이벤트 사실관계", "공시 원문만 인용. 제목 요약 금지 —\n발행조건은 원문에 있다", BLU],
-      ["credit-analyst\n크레딧분석역", "§13 · §11", "ds002.bond_balance\nds005.cb_amount · cb_conv_price", "사채 만기 구조 · 자금 사용\n전환 잠재주식 · 희석 감시", "리픽싱 하한은 우리가 넣은 값.\n실제 조항은 증권신고서 확인", BLU],
-      ["governance-analyst\n지배구조분석역", "§14 · §15", "ds004.major_holder · exec_holder\nds002.audit_opinion", "지분 변동 · 내부자 매매\n감사의견 · 지배구조 변동", "대량보유는 사후 보고다.\n보고 지연 가능성을 함께 적는다", BLU],
-      ["capital-structure\n자본구조분석역", "§6", "ds002.stock_total · treasury\nlargest_pct · krx.bydd.shares", "발행주식총수 · 자기주식\n최대주주 지분 · 완전희석", "분기 공시라 시점차가 있다.\n기준일과 경과일수를 붙인다", BLU],
-      ["quant-researcher\n계량분석역", "§16", "ledger.factors · ledger.candles\nledger.papers (state=adopted)", "팩터 해설 + limits\n재현 판정 검토", "재현되지 않은 논문 인용 금지.\n논문이 주장하지 않는 것을 함께 낸다", PUR],
-      ["macro-strategist\n매크로전략역", "§4 · §18", "ledger.macro (ECOS 100대)\nledger.calendar · FRED", "국면 서술 (수준 아닌 분위)\n금통위 · 만기 · 락업 일정", "락업은 '추정' 등급 고정 —\n확약으로 서술하면 게이트 탈락", CYN],
-      ["return-analyst\n수익률분석역", "§9", "ds002.dividend_ps\n수정주가 계열", "총수익률 · 배당 반영\n벤치마크 대비 초과분", "희석과 권리락을 구분한 수정주가만\n쓴다. 판별 불가는 '확인 필요'", BLU],
-    ],
-    "리서치 일곱 데스크는 서로의 산출물을 보지 않는다. 같은 결론으로 수렴하면 교차검증의 의미가 사라지기 때문이다. 불일치는 지우지 않고 IC 간사가 쟁점으로 올린다.");
-}
-
-function sDesk2() {
-  deskTable("PART 3 · CATALOG 2/3", "집행 · 리스크관리본부 — 다섯 데스크",
-    "리스크 세 데스크는 전부 거부권을 갖는다. 숫자가 원장과 다르면 고쳐 주지 않고 돌려보낸다.",
-    [
-      ["execution-trader\n집행역", "§7", "exit_plan.csv (사내)\n집행 시뮬레이션 결과", "목표회수단가 갭 · 시나리오\n매도 규칙 4종 비교", "주문 API 호출 불가 (OrderNotAllowed).\n권고를 쓰지 않는다", AMB],
-      ["liquidity-analyst\n유동성분석역", "§8", "krx.bydd.volume · value\nkis.snap.* (원장에 쓰지 않음)", "처분 소요일수 (평균·중앙값)\n유효 스프레드 · 비유동성 · 매물대", "평균과 중앙값을 반드시 함께 낸다.\n참여율 가정을 표에 적는다", AMB],
-      ["market-risk\n시장리스크심사역  (거부권)", "§4", "krx.bydd.close · krx.idx.close\n리서치 봉투 전량", "변동성 · VaR · 상관\n가정 스트레스", "인용된 값이 원장 값과 다르면 반려.\n숫자를 고쳐 주지 않는다", MAG],
-      ["concentration-risk\n집중도심사역  (거부권)", "§2", "krx.bydd.mktcap · close\n포지션 원장", "포지션 집중도 · 업종 편중\n단일종목 한도 대비", "사내 한도값은 '사내' 등급이다.\n1차와 같은 표에 섞지 않는다", MAG],
-      ["model-risk ★\n모델리스크심사역  (거부권)", "—", "재현 러너 코드 · 팩터 정의\n재현 판정 이력", "재현 설계 자체의 타당성 검증\n표본 구간 · 생존편의 점검", "★ 8데스크 체제에 없던 자리 —\n재현 관문을 누가 검증하는가", MAG],
-    ],
-    "★ model-risk 는 이번 확장에서 새로 보인 자리다. 재현 관문을 넣었는데 그 재현 러너가 맞는지는 누가 보는가 — 실제 금융사에서 모델리스크관리가 준법감시와 별도로 존재하는 이유와 같다.");
-}
-
-function sDesk3() {
-  deskTable("PART 3 · CATALOG 3/3", "준법·감사 · 데이터·IT · 의결 — 여덟 데스크",
-    "이쪽은 새로운 해석을 만들지 않는다. 검사하고, 원장을 유지하고, 회의에 올린다.",
-    [
-      ["compliance-officer\n준법감시역  (거부권)", "—", "발행 직전의 모든 산출물\nSECTION_SOURCES · CATALOG", "일곱 게이트 판정\n발행 승인 / 반려", "하나라도 걸리면 발행 중단.\n조용히 통과시키는 것이 가장 위험하다", ORG],
-      ["internal-audit\n내부감사역", "§16", "봉투 이력 · 실행 로그\n스코어카드", "사후 검증 · 리플레이\n승격·반려 분포 분석", "사전 차단이 아니라 사후 확인이다.\n준법감시와 역할을 섞지 않는다", ORG],
-      ["disclosure-control\n배포통제역", "—", "STAGE · 수신자 목록\n생성된 리포트", "워터마크 · 배포 범위 판정\n대외 공유 전 승인", "리포트에는 포트폴리오사 실명이 있다.\n라이선스보다 열람범위가 실질이다", ORG],
-      ["ingest-ops\n적재운영역  (쓰기 단독)", "—", "KRX·DART·ECOS·KIS·FRED\ndiagnose · catalog", "ingest · catchup · fundamentals\n그날의 유일한 원장 쓰기", "해석을 만들지 않는다.\n이 데스크만 ki.sqlite 에 쓸 수 있다", GRN],
-      ["data-quality\n품질관리역", "§10", ".api_fields.json · stale_days\n결측 현황", "필드매핑 검증 상태\n신선도 · 결측 경고", "\"API 가 된다\"와 \"내 필드가 맞다\"는\n다른 문제다", GRN],
-      ["factor-librarian\n팩터관리역", "—", "ki.papers/2 논문 원장\n재현 판정 결과", "채택 · 경고 · 은퇴 상태 관리\n팩터 카탈로그 유지", "상태를 바꾸는 것은 배치이지\n에이전트가 아니다", GRN],
-      ["research-editor\n리서치에디터", "§1 · §3", "게이트 통과 봉투 전량", "오늘 달라진 것 · 가격 벤치마크\n용어 일관성 · 중복 정리", "문장을 다듬되 값을 바꾸지 않는다.\n요약이 원문보다 세지면 반려", GLD],
-      ["ic-chair\n투자심의위원회 간사", "—", "게이트 통과 봉투 전량", "회의자료 한 장으로 조립\n데스크 간 불일치 · 결측 쟁점화", "종합 의견 · 권고를 쓰지 않는다.\n쟁점을 정렬할 뿐, 결정은 사람이 한다", GLD],
-    ],
-    "거부권은 실제로 발행을 멈추는 권한이다. 리스크 세 곳과 준법감시 중 하나라도 반려하면 그날 회의자료에서 해당 절이 통째로 빠지고, 그 자리에는 '반려됨 — 사유'가 남는다.");
-}
 
 
-/* ═══ PART 1 로 흡수 — 측정층이 이미 재고 있는 것 ═══ */
+
+
 function sRefix() {
   const s = slide();
   header(s, "PART 1 · ★ 이미 재고 있는 것 — 리픽싱", "리픽싱 — 주가가 더 내리면 희석이 얼마나 가속되는가",
@@ -1701,9 +1474,9 @@ function sSystemMap() {
   s.addShape(pres.ShapeType.rect, { x: 4.86, y: 2.02, w: 3.54, h: 0.36, fill: { color: BLU }, line: { type: "none" } });
   mono(s, "② 판단층", { x: 5.0, y: 2.02, w: 1.6, h: 0.36, fontSize: 10.5, bold: true, color: "0D1018", valign: "middle" });
   mono(s, "PART 3", { x: 6.9, y: 2.02, w: 1.36, h: 0.36, fontSize: 9, bold: true, color: "0D1018", align: "right", valign: "middle" });
-  txt(s, "데스크 20", { x: 5.02, y: 2.46, w: 3.2, h: 0.32, fontSize: 15, bold: true, color: INK });
-  mono(s, "상설 5  +  이벤트 소집 15", { x: 5.02, y: 2.8, w: 3.2, h: 0.22, fontSize: 9, color: MUT });
-  const units = [["리서치 7", BLU], ["집행 2", AMB], ["리스크 3", MAG], ["준법·감사 3", ORG], ["데이터 3", GRN], ["의결 2", GLD]];
+  txt(s, "데스크 9", { x: 5.02, y: 2.46, w: 3.2, h: 0.32, fontSize: 15, bold: true, color: INK });
+  mono(s, "상설 3  +  이벤트 소집 6", { x: 5.02, y: 2.8, w: 3.2, h: 0.22, fontSize: 9, color: MUT });
+  const units = [["q1 진척", CYN], ["q2 처분", GRN], ["q3 집행", AMB], ["q4 시점", MAG], ["계량 · 검산", PUR], ["준법 · 원장 · 간사", ORG]];
   units.forEach((u, i) => {
     const x = 5.02 + (i % 3) * 1.1, y = 3.12 + Math.floor(i / 3) * 0.36;
     s.addShape(pres.ShapeType.rect, { x, y, w: 1.02, h: 0.3, fill: { color: PANEL2 }, line: { type: "none" } });
@@ -1903,7 +1676,156 @@ function sSpec() {
   ], { x: M + 0.26, y: 6.64, w: CW - 0.52, h: 0.46, fontSize: 10, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
 
-/* ══════════════════ 슬라이드 순서 (38장) ══════════════════ */
+
+/* ═══ 질문이 데스크를 정한다 (CATALOG 가 아니라) ═══ */
+function sQuestionMap() {
+  const s = slide();
+  header(s, "PART 3 · WHY NINE", "데스크는 네 질문이 정한다",
+         "앞선 안은 CATALOG(무슨 데이터가 있나)에서 데스크를 뽑았다. 그건 데이터 목록이지 결정 목록이 아니다. 이 도구가 답해야 하는 것은 네 질문이다.");
+
+  const qs = [
+    ["q1", "얼마나 왔는가", "회수계획 대비 진척", "§1 오늘 달라진 것 · §5 재무 · §7 목표단가 갭 · §9 총수익률", "논문 3편", CYN],
+    ["q2", "팔 수 있는가", "처분 여건 · 거래비용", "§2 집중도 · §6 자본구조 · §8 유동성 · §11 희석 · §13 사채 · §14 지분 · §15 감사", "논문 5편", GRN],
+    ["q3", "어떻게 팔 것인가", "실행", "§3 집행 시뮬레이션", "논문 2편", AMB],
+    ["q4", "지금이 그 때인가", "시점 · 국면", "§4 국면 · §12 공시 이벤트 · CAR · §18 이번 주 일정", "논문 2편", MAG],
+  ];
+  qs.forEach((q, i) => {
+    const y = 1.94 + i * 0.86;
+    panel(s, { x: M, y, w: CW, h: 0.74, fill: PANEL, line: EDGE });
+    s.addShape(pres.ShapeType.rect, { x: M + 0.18, y: y + 0.16, w: 0.5, h: 0.42, fill: { color: q[5] }, line: { type: "none" } });
+    mono(s, q[0], { x: M + 0.18, y: y + 0.16, w: 0.5, h: 0.42, fontSize: 13, bold: true, color: "0D1018", align: "center", valign: "middle" });
+    txt(s, q[1], { x: M + 0.84, y: y + 0.1, w: 2.5, h: 0.3, fontSize: 13.5, bold: true, color: INK });
+    txt(s, q[2], { x: M + 0.84, y: y + 0.4, w: 2.6, h: 0.26, fontSize: 9.5, color: q[5] });
+    mono(s, q[3], { x: M + 3.6, y, w: 6.9, h: 0.74, fontSize: 8.4, color: MUT, valign: "middle" });
+    mono(s, q[4], { x: M + 10.6, y, w: 1.3, h: 0.74, fontSize: 9, bold: true, color: q[5], align: "right", valign: "middle" });
+  });
+
+  panel(s, { x: M, y: 5.46, w: 6.1, h: 1.36, fill: "24141B", line: "5C2A3A" });
+  txt(s, "앞선 안의 오류", { x: M + 0.2, y: 5.58, w: 5.7, h: 0.28, fontSize: 12, bold: true, color: MAG });
+  txt(s, "CATALOG 31개 항목 → SECTIONS 18개 절 → 데스크 20개로 뽑았다. 데이터가 있는 만큼 데스크를 만든 셈이다. 그러면 §16 스코어카드처럼 네 질문 중 어느 것도 바꾸지 않는 절에도 담당이 생긴다.", {
+    x: M + 0.2, y: 5.88, w: 5.74, h: 0.86, fontSize: 9.5, color: INK });
+
+  panel(s, { x: 6.86, y: 5.46, w: 5.87, h: 1.36, fill: "16281C", line: "2A5A3A" });
+  txt(s, "고친 방식", { x: 7.06, y: 5.58, w: 5.4, h: 0.28, fontSize: 12, bold: true, color: GRN });
+  txt(s, "질문 하나에 데스크 하나. 절은 질문에 딸려 온다. 논문도 이미 네 질문으로 태그돼 있다(.papers.json 의 question 필드) — 코드가 처음부터 이 구조였고, 조직도만 딴 데서 뽑았던 것이다.", {
+    x: 7.06, y: 5.88, w: 5.5, h: 0.86, fontSize: 9.5, color: INK });
+}
+
+/* ═══ 목표 조직도 — 9 데스크 ═══ */
+function sOrg() {
+  const s = slide();
+  header(s, "PART 3 · TARGET ORG", "아홉 데스크 — 질문 넷 · 방법론 하나 · 통제 셋 · 간사 하나",
+         "회의 자료 한 장을 만드는 데 필요한 최소 분업이다. 늘리는 것은 쉽고, 늘린 만큼 조정 비용이 든다.");
+
+  const cols = [
+    { t: "질문 데스크", sub: "THE FOUR QUESTIONS", c: CYN, w: 5.6, items: [
+      ["q1-progress", "진척역", "§1 · §5 · §7 · §9", CYN],
+      ["q2-disposal", "처분역", "§2 · §6 · §8 · §11 · §13 · §14 · §15", GRN],
+      ["q3-execution", "집행역", "§3", AMB],
+      ["q4-timing", "시점역", "§4 · §12 · §18", MAG],
+    ]},
+    { t: "방법론 · 통제 · 조립", sub: "METHOD · CONTROL · ASSEMBLY", c: ORG, w: 6.53, items: [
+      ["quant-method", "계량역 — 팩터 · 논문 재현", "§16", PUR],
+      ["risk-officer", "검산역 — 숫자 재검산  (거부권)", "—", MAG],
+      ["compliance-officer", "준법감시역 — 게이트  (거부권)", "—", ORG],
+      ["data-ops", "원장운영역 — 쓰기 단독 · 품질", "§10", GRN],
+      ["ic-chair", "간사 — 조립 · 쟁점 정렬", "—", GLD],
+    ]},
+  ];
+  let x = M;
+  cols.forEach(col => {
+    panel(s, { x, y: 1.90, w: col.w, h: 0.56, fill: col.c, line: null });
+    txt(s, col.t, { x: x + 0.18, y: 1.96, w: col.w - 0.36, h: 0.26, fontSize: 12.5, bold: true, color: "0D1018" });
+    mono(s, col.sub, { x: x + 0.18, y: 2.2, w: col.w - 0.36, h: 0.2, fontSize: 7.6, color: "0D1018", charSpacing: 1 });
+    col.items.forEach((d, j) => {
+      const y = 2.58 + j * 0.57;
+      panel(s, { x, y, w: col.w, h: 0.50, fill: PANEL, line: EDGE });
+      s.addShape(pres.ShapeType.rect, { x: x + 0.14, y: y + 0.11, w: 0.1, h: 0.28, fill: { color: d[3] }, line: { type: "none" } });
+      mono(s, d[0], { x: x + 0.36, y: y + 0.04, w: 2.0, h: 0.2, fontSize: 8.4, bold: true, color: INK });
+      txt(s, d[1], { x: x + 0.36, y: y + 0.25, w: col.w - 1.9, h: 0.22, fontSize: 8.8, color: MUT });
+      mono(s, d[2], { x: x + col.w - 1.5, y, w: 1.36, h: 0.50, fontSize: 7.4, color: d[3], align: "right", valign: "middle" });
+    });
+    x += col.w + 0.13;
+  });
+
+  panel(s, { x: M, y: 5.44, w: CW, h: 0.62, fill: PANEL3, line: EDGE });
+  txt(s, [
+    { text: "상설 3 (data-ops · compliance · ic-chair) + 이벤트 소집 6. ", options: { bold: true, color: GRN } },
+    { text: "조용한 날은 상설 셋만 돈다. 질문 데스크는 그 질문의 답이 달라졌을 때만 소집된다.", options: { color: INK } },
+  ], { x: M + 0.26, y: 5.44, w: CW - 0.52, h: 0.62, fontSize: 11, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
+
+  panel(s, { x: M, y: 6.18, w: CW, h: 0.64, fill: GLD, line: null });
+  txt(s, "의결  ·  투자심의위원회 (IC) — 아홉 데스크의 산출을 놓고 사람이 결정한다", {
+    x: M + 0.26, y: 6.18, w: CW - 0.52, h: 0.64, fontSize: 12.5, bold: true, color: "2E2408", valign: "middle" });
+}
+
+/* ═══ 데스크 카탈로그 — 질문 넷 ═══ */
+function sDesk1() {
+  const s = slide();
+  header(s, "PART 3 · CATALOG 1/2", "질문 데스크 넷 — 각자 하나의 질문에만 답한다",
+         "담당 질문 밖은 읽지 않는다. 읽지 않은 것에 대해 말할 여지가 없다는 뜻이다.");
+  const head = ["데스크", "질문", "읽는 것", "내는 것", "제약"].map(h => ({
+    text: h, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10, valign: "middle", fontFace: FM } }));
+  const rows = [
+    ["q1-progress\n진척역", "얼마나\n왔는가", "ledger.facts (종가·시총·배당)\ndart.fs.* · exit_plan.csv (사내)",
+     "회수계획 대비 진척\n목표회수단가 갭 · 총수익률", "exit_plan 은 '사내' 등급.\n1차와 같은 표에 섞지 않는다", CYN],
+    ["q2-disposal\n처분역", "팔 수\n있는가", "ledger.facts (거래량·거래대금·지분)\nds002/004/005 · ledger.calendar",
+     "처분 소요일수 (평균·중앙값)\n유동성 · 희석 · 락업 잔여", "평균과 중앙값을 함께 낸다.\n락업은 '추정' 등급 고정", GRN],
+    ["q3-execution\n집행역", "어떻게\n팔 것인가", "ledger.facts (일별 거래량)\nq2 의 처분 여건 봉투",
+     "매도 규칙 4종 비교\n충격 가정의 민감도", "권고를 쓰지 않는다.\n주문 API 호출 불가", AMB],
+    ["q4-timing\n시점역", "지금이\n그 때인가", "ledger.macro · ledger.calendar\nledger.disclosure (CAR)",
+     "국면 (수준 아닌 분위)\n공시 이벤트 · 다가오는 일정", "일정 등급을 섞지 않는다\n(공표 · 규칙 · 추정)", MAG],
+  ];
+  const body=[head];
+  rows.forEach((r,i)=>{ const bg=i%2?PANEL3:PANEL; body.push([
+    {text:r[0],options:{bold:true,color:r[5],fontSize:10,valign:"middle",fontFace:FM,fill:{color:bg}}},
+    {text:r[1],options:{bold:true,color:GLD,fontSize:9.5,align:"center",valign:"middle",fill:{color:bg}}},
+    {text:r[2],options:{color:MUT,fontSize:9,valign:"middle",fill:{color:bg}}},
+    {text:r[3],options:{color:INK,fontSize:9,valign:"middle",fill:{color:bg}}},
+    {text:r[4],options:{color:DIM,fontSize:8.5,italic:true,valign:"middle",fill:{color:bg}}},
+  ]);});
+  s.addTable(body,{x:M,y:1.86,w:CW,colW:[2.18,1.06,3.08,2.86,2.95],
+    border:{type:"solid",color:EDGE,pt:1},fontFace:F,rowH:0.80,margin:0.07,autoPage:false});
+  panel(s,{x:M,y:6.0,w:CW,h:0.82,fill:PANEL3,line:EDGE});
+  txt(s,"q3 집행역만 q2 의 봉투를 읽는다 — \"어떻게 팔 것인가\"는 \"팔 수 있는가\"의 답 위에서만 성립하기 때문이다. 나머지 셋은 서로의 산출을 보지 않는다. 같은 결론으로 수렴하면 교차검증의 의미가 사라진다.",
+    {x:M+0.26,y:6.0,w:CW-0.52,h:0.82,fontSize:10.5,color:INK,valign:"middle"});
+}
+
+function sDesk2() {
+  const s = slide();
+  header(s, "PART 3 · CATALOG 2/2", "방법론 · 통제 · 조립 — 다섯 데스크",
+         "새로운 해석을 만들지 않는다. 근거를 대고, 검사하고, 원장을 유지하고, 회의에 올린다.");
+  const head = ["데스크", "역할", "읽는 것", "내는 것", "제약"].map(h => ({
+    text: h, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10, valign: "middle", fontFace: FM } }));
+  const rows = [
+    ["quant-method\n계량역", "방법론 근거", "ledger.factors · ledger.papers\n(state=adopted 만)",
+     "팩터 해설 + limits\n주간 재현 판정 검토", "네 질문 중 하나를 바꾸지 않는\n논문은 채택 대상이 아니다", PUR],
+    ["risk-officer\n검산역  (거부권)", "숫자 재검산", "네 질문 데스크의 봉투 전량\nledger.facts 원본",
+     "인용값 vs 원장값 대조\n가정 스트레스", "숫자를 고쳐 주지 않는다 —\n돌려보낸다", MAG],
+    ["compliance-officer\n준법감시역  (거부권)", "발행 게이트", "발행 직전의 모든 산출물\nSECTION_SOURCES",
+     "일곱 게이트 판정\n발행 승인 / 반려", "하나라도 걸리면 발행 중단.\n조용히 통과시키지 않는다", ORG],
+    ["data-ops\n원장운영역  (쓰기 단독)", "원장 · 품질", "KRX·DART·ECOS·KIS·FRED\n.api_fields.json · stale_days",
+     "그날의 유일한 원장 쓰기\n§10 품질 · 결측 경고", "해석을 만들지 않는다.\n이 데스크만 ki.sqlite 에 쓴다", GRN],
+    ["ic-chair\n투자심의위원회 간사", "조립", "게이트 통과 봉투 전량",
+     "회의자료 한 장으로 조립\n질문 간 불일치 · 결측 쟁점화", "종합 의견 · 권고를 쓰지 않는다.\n쟁점을 정렬할 뿐", GLD],
+  ];
+  const body=[head];
+  rows.forEach((r,i)=>{ const bg=i%2?PANEL3:PANEL; body.push([
+    {text:r[0],options:{bold:true,color:r[5],fontSize:9.5,valign:"middle",fontFace:FM,fill:{color:bg}}},
+    {text:r[1],options:{bold:true,color:GLD,fontSize:9,align:"center",valign:"middle",fill:{color:bg}}},
+    {text:r[2],options:{color:MUT,fontSize:8.8,valign:"middle",fill:{color:bg}}},
+    {text:r[3],options:{color:INK,fontSize:8.8,valign:"middle",fill:{color:bg}}},
+    {text:r[4],options:{color:DIM,fontSize:8.4,italic:true,valign:"middle",fill:{color:bg}}},
+  ]);});
+  s.addTable(body,{x:M,y:1.86,w:CW,colW:[2.46,1.06,3.0,2.76,2.85],
+    border:{type:"solid",color:EDGE,pt:1},fontFace:F,rowH:0.66,margin:0.06,autoPage:false});
+  panel(s,{x:M,y:6.0,w:CW,h:0.82,fill:PANEL3,line:EDGE});
+  txt(s,[{text:"거부권은 실제로 발행을 멈추는 권한이다. ",options:{bold:true,color:MAG}},
+    {text:"검산역과 준법감시 중 하나라도 반려하면 그날 회의자료에서 해당 질문이 통째로 빠지고, 그 자리에는 '반려됨 — 사유' 가 남는다. 빈칸으로 두지 않는다.",options:{color:INK}}],
+    {x:M+0.26,y:6.0,w:CW-0.52,h:0.82,fontSize:10.5,valign:"middle",fontFace:F,isTextBox:true,margin:0});
+}
+
+/* ══════════════════ 슬라이드 순서 (37장) ══════════════════ */
 sTitle();          sExec();        sSystemMap();
 /* PART 1 — 지금 */
 sAsIs();           sWhy();         sRules();
@@ -1911,8 +1833,7 @@ sRefix();          sNotExRight();  sLiquidity();
 /* PART 2 — 논문을 살린다 */
 sProblem();        sPipeline();    sReplication();  sDecay();     sLedger();
 /* PART 3 — 조직과 에이전트 (20 데스크) */
-sOrg();            sSectionMap();  sDesk1();        sDesk2();     sDesk3();
-sSourcing();
+sQuestionMap();    sOrg();         sDesk1();        sDesk2();     sSourcing();
 sStandingSpawn();  sLifecycle();   sTriggers();     sLoad();      sEscalation();
 /* PART 4 — 통제 */
 sWall();           sRbac();        sEnvelope();     sGates();     sScorecard();
