@@ -45,6 +45,7 @@ trading-floor/.ki-cache/
 *.pptx
 !docs/agentization/*.pptx
 !docs/agentization/**/*.pptx
+!docs/portfolio/*.pptx
 *.xlsx
 *.hwp
 

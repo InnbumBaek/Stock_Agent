@@ -12,6 +12,7 @@ KRX · DART · ECOS · KIS  →  ki.sqlite (원장)  →  HTML 리포트  →  �
 - 실행 안내 — [`docs/RUN.md`](docs/RUN.md) · 처음이면 [`START-HERE.txt`](START-HERE.txt)
 - 개발 규칙 — [`CLAUDE.md`](CLAUDE.md)
 - 데이터 출처·이용 조건 — [`stock-monitor/SOURCES.md`](stock-monitor/SOURCES.md)
+- **포트폴리오 (메자닌 회수 판단)** — [`docs/portfolio/`](docs/portfolio/)
 - **에이전트화 계획안** — [`docs/agentization/`](docs/agentization/)
 
 ## 설계 원칙
