@@ -1058,12 +1058,12 @@ function sRbac() {
 
   const cols = ["원장 읽기", "원장 쓰기", "외부 API", "KIS 주문", "회의자료 발행", "거부권"];
   const M_ = [
-    ["equity-analyst",     ["●","✕","△ DART","✕","✕","✕"]],
-    ["credit-analyst",     ["●","✕","△ DART","✕","✕","✕"]],
-    ["governance-analyst", ["●","✕","△ DART","✕","✕","✕"]],
-    ["capital-structure",  ["●","✕","△ DART","✕","✕","✕"]],
+    ["equity-analyst",     ["●","✕","△ 원문만","✕","✕","✕"]],
+    ["credit-analyst",     ["●","✕","△ 원문만","✕","✕","✕"]],
+    ["governance-analyst", ["●","✕","△ 원문만","✕","✕","✕"]],
+    ["capital-structure",  ["●","✕","✕","✕","✕","✕"]],
     ["quant-researcher",   ["●","✕","△ 논문 4곳","✕","✕","✕"]],
-    ["macro-strategist",   ["●","✕","△ ECOS·FRED","✕","✕","✕"]],
+    ["macro-strategist",   ["●","✕","✕","✕","✕","✕"]],
     ["return-analyst",     ["●","✕","✕","✕","✕","✕"]],
     ["execution-trader",   ["●","✕","✕","✕","✕","✕"]],
     ["liquidity-analyst",  ["●","✕","✕","✕","✕","✕"]],
@@ -1074,7 +1074,7 @@ function sRbac() {
     ["internal-audit",     ["●","✕","✕","✕","✕","✕"]],
     ["disclosure-control", ["●","✕","✕","✕","● 배포","✕"]],
     ["ingest-ops",         ["●","●","● 5종 전부","✕","✕","✕"]],
-    ["data-quality",       ["●","✕","△ 진단만","✕","✕","✕"]],
+    ["data-quality",       ["●","✕","✕","✕","✕","✕"]],
     ["factor-librarian",   ["●","✕","✕","✕","✕","✕"]],
     ["research-editor",    ["●","✕","✕","✕","✕","✕"]],
     ["ic-chair",           ["●","✕","✕","✕","△ 초안만","✕"]],
@@ -1102,16 +1102,16 @@ function sRbac() {
   });
 
   const boxes = [
-    ["KIS 주문 열은 전부 ✕", "같은 서버에 주문 API 가 있지만 화이트리스트에 없다. 코드가 OrderNotAllowed 로 막고 selftest 가 매번 검사한다. 에이전트에게도 이 도구는 만들지 않는다.", MAG],
+    ["외부 API 는 ingest-ops 뿐", "데스크는 네트워크를 쓰지 않는다. 실시간 호출을 허용하면 데스크마다 다른 시각의 값을 보게 되고 기준일이 깨진다.", MAG],
     ["원장 쓰기는 한 칸뿐", "ingest-ops 만 ●. 나머지 열아홉은 MCP 읽기 도구만 받는다. 역할이 20개로 늘어도 이 칸은 하나다.", GRN],
-    ["△ 는 화이트리스트 호출", "해당 데스크가 부를 수 있는 엔드포인트를 명시 열거한다. 목록 밖 호출은 PreToolUse 훅이 차단한다.", AMB],
+    ["△ 는 DART 원문 조회뿐", "수치는 전부 원장에서 읽는다. 밖으로 나가는 것은 접수번호로 지정된 공시 문서 한 건을 열 때뿐이다 — 검색이 아니다.", AMB],
   ];
   boxes.forEach((b, i) => {
     const x = M + i * 4.11;
-    panel(s, { x, y: 6.00, w: 3.94, h: 0.92, fill: PANEL, line: EDGE });
-    s.addShape(pres.ShapeType.rect, { x: x + 0.2, y: 6.18, w: 0.14, h: 0.14, fill: { color: b[2] }, line: { type: "none" } });
-    txt(s, b[0], { x: x + 0.44, y: 6.10, w: 3.3, h: 0.28, fontSize: 11.5, bold: true, color: b[2] });
-    txt(s, b[1], { x: x + 0.2, y: 6.40, w: 3.58, h: 0.46, fontSize: 8.8, color: MUT });
+    panel(s, { x, y: 6.22, w: 3.94, h: 0.84, fill: PANEL, line: EDGE });
+    s.addShape(pres.ShapeType.rect, { x: x + 0.2, y: 6.39, w: 0.14, h: 0.14, fill: { color: b[2] }, line: { type: "none" } });
+    txt(s, b[0], { x: x + 0.44, y: 6.31, w: 3.3, h: 0.28, fontSize: 11.5, bold: true, color: b[2] });
+    txt(s, b[1], { x: x + 0.2, y: 6.61, w: 3.58, h: 0.42, fontSize: 8.8, color: MUT });
   });
 }
 
@@ -1668,8 +1668,242 @@ function sLiquidity() {
   ], { x: M + 0.26, y: 6.16, w: CW - 0.52, h: 0.62, fontSize: 10, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
 
-/* ══════════════════ 슬라이드 순서 (36장) ══════════════════ */
-sTitle();          sExec();        sAgenda();
+
+/* ═══ 시스템 한 장 — 목차를 겸한다 ═══ */
+function sSystemMap() {
+  const s = slide();
+  header(s, "THE WHOLE THING", "한 장으로 — 무엇이 어디로 흐르는가",
+         "이 한 장만 보셔도 됩니다. 각 블록에 붙은 PART 가 그것을 설명하는 곳입니다.");
+
+  /* ① 측정층 */
+  panel(s, { x: M, y: 2.02, w: 3.3, h: 2.72, fill: PANEL, line: GRN });
+  s.addShape(pres.ShapeType.rect, { x: M, y: 2.02, w: 3.3, h: 0.36, fill: { color: GRN }, line: { type: "none" } });
+  mono(s, "① 측정층", { x: M + 0.14, y: 2.02, w: 1.6, h: 0.36, fontSize: 10.5, bold: true, color: "0D1018", valign: "middle" });
+  mono(s, "PART 1", { x: M + 1.9, y: 2.02, w: 1.26, h: 0.36, fontSize: 9, bold: true, color: "0D1018", align: "right", valign: "middle" });
+  mono(s, "KRX · DART · ECOS · KIS · FRED", { x: M + 0.16, y: 2.5, w: 3.0, h: 0.24, fontSize: 9, color: MUT });
+  mono(s, "▼  16:10 · ingest-ops 단독", { x: M + 0.16, y: 2.76, w: 3.0, h: 0.24, fontSize: 9, bold: true, color: AMB });
+  s.addImage({ data: img("ob_db"), x: M + 0.18, y: 3.06, w: 0.54, h: 0.54 });
+  txt(s, "ki.sqlite 원장", { x: M + 0.82, y: 3.1, w: 2.3, h: 0.3, fontSize: 14, bold: true, color: INK });
+  mono(s, "7 tables · 사실만", { x: M + 0.82, y: 3.4, w: 2.3, h: 0.22, fontSize: 8.5, color: MUT });
+  mono(s, "▼", { x: M + 0.16, y: 3.68, w: 3.0, h: 0.2, fontSize: 9, color: DIM });
+  panel(s, { x: M + 0.16, y: 3.92, w: 2.98, h: 0.66, fill: PANEL2, line: null, off: 0 });
+  txt(s, "측정 함수 — 계산은 여기서 끝난다", { x: M + 0.28, y: 3.96, w: 2.76, h: 0.26, fontSize: 9.5, bold: true, color: GRN });
+  mono(s, "리픽싱 · 완전희석 · 처분소요일 · 집행시뮬", { x: M + 0.28, y: 4.22, w: 2.78, h: 0.24, fontSize: 7.6, color: MUT });
+
+  /* 벽 */
+  for (let i = 0; i < 5; i++) s.addImage({ data: img("ob_wall"), x: 4.04, y: 2.02 + i * 0.545, w: 0.56, h: 0.56 });
+  s.addShape(pres.ShapeType.rect, { x: 3.92, y: 3.06, w: 0.8, h: 0.62, fill: { color: "0D1018" }, line: { color: AMB, width: 1.25 } });
+  mono(s, "READ\nONLY", { x: 3.92, y: 3.06, w: 0.8, h: 0.62, fontSize: 8.5, bold: true, color: AMB, align: "center", valign: "middle", lineSpacing: 10 });
+  mono(s, "MCP 8", { x: 3.86, y: 4.78, w: 0.92, h: 0.22, fontSize: 8, bold: true, color: AMB, align: "center" });
+
+  /* ② 판단층 */
+  panel(s, { x: 4.86, y: 2.02, w: 3.54, h: 2.72, fill: PANEL, line: BLU });
+  s.addShape(pres.ShapeType.rect, { x: 4.86, y: 2.02, w: 3.54, h: 0.36, fill: { color: BLU }, line: { type: "none" } });
+  mono(s, "② 판단층", { x: 5.0, y: 2.02, w: 1.6, h: 0.36, fontSize: 10.5, bold: true, color: "0D1018", valign: "middle" });
+  mono(s, "PART 3", { x: 6.9, y: 2.02, w: 1.36, h: 0.36, fontSize: 9, bold: true, color: "0D1018", align: "right", valign: "middle" });
+  txt(s, "데스크 20", { x: 5.02, y: 2.46, w: 3.2, h: 0.32, fontSize: 15, bold: true, color: INK });
+  mono(s, "상설 5  +  이벤트 소집 15", { x: 5.02, y: 2.8, w: 3.2, h: 0.22, fontSize: 9, color: MUT });
+  const units = [["리서치 7", BLU], ["집행 2", AMB], ["리스크 3", MAG], ["준법·감사 3", ORG], ["데이터 3", GRN], ["의결 2", GLD]];
+  units.forEach((u, i) => {
+    const x = 5.02 + (i % 3) * 1.1, y = 3.12 + Math.floor(i / 3) * 0.36;
+    s.addShape(pres.ShapeType.rect, { x, y, w: 1.02, h: 0.3, fill: { color: PANEL2 }, line: { type: "none" } });
+    s.addShape(pres.ShapeType.rect, { x, y, w: 0.07, h: 0.3, fill: { color: u[1] }, line: { type: "none" } });
+    mono(s, u[0], { x: x + 0.14, y, w: 0.86, h: 0.3, fontSize: 7.4, bold: true, color: INK, valign: "middle" });
+  });
+  panel(s, { x: 5.02, y: 3.92, w: 3.22, h: 0.66, fill: "1A1428", line: null, off: 0 });
+  txt(s, "봉투 제출 — 등급 '해석'", { x: 5.14, y: 3.96, w: 3.0, h: 0.26, fontSize: 9.5, bold: true, color: PUR });
+  mono(s, "계산하지 않는다 · 읽고 서술한다", { x: 5.14, y: 4.22, w: 3.0, h: 0.24, fontSize: 7.6, color: MUT });
+
+  s.addImage({ data: img("ar_am"), x: 8.46, y: 3.24, w: 0.32, h: 0.2 });
+
+  /* ③ 통제 */
+  panel(s, { x: 8.86, y: 2.02, w: 2.2, h: 2.72, fill: PANEL, line: MAG });
+  s.addShape(pres.ShapeType.rect, { x: 8.86, y: 2.02, w: 2.2, h: 0.36, fill: { color: MAG }, line: { type: "none" } });
+  mono(s, "③ 통제", { x: 9.0, y: 2.02, w: 1.1, h: 0.36, fontSize: 10.5, bold: true, color: "0D1018", valign: "middle" });
+  mono(s, "PART 4", { x: 9.6, y: 2.02, w: 1.32, h: 0.36, fontSize: 9, bold: true, color: "0D1018", align: "right", valign: "middle" });
+  s.addImage({ data: img("ob_gate"), x: 9.02, y: 2.5, w: 0.44, h: 0.44 });
+  txt(s, "게이트 ×7", { x: 9.56, y: 2.54, w: 1.4, h: 0.32, fontSize: 14, bold: true, color: INK });
+  ["판정 어휘", "출처 등급", "★ 재현", "논문 실재", "신선도", "유출 검사", "4-eyes"].forEach((t, i) => {
+    mono(s, (i + 1) + "  " + t, { x: 9.02, y: 3.1 + i * 0.22, w: 1.9, h: 0.2, fontSize: 7.6,
+      color: t.indexOf("★") === 0 ? GRN : MUT });
+  });
+
+  s.addImage({ data: img("ar_am"), x: 11.12, y: 3.24, w: 0.32, h: 0.2 });
+
+  /* ④ 의결 */
+  panel(s, { x: 11.52, y: 2.02, w: 1.21, h: 2.72, fill: PANEL, line: GLD });
+  s.addShape(pres.ShapeType.rect, { x: 11.52, y: 2.02, w: 1.21, h: 0.36, fill: { color: GLD }, line: { type: "none" } });
+  mono(s, "④ 의결", { x: 11.52, y: 2.02, w: 1.21, h: 0.36, fontSize: 9.5, bold: true, color: "0D1018", align: "center", valign: "middle" });
+  s.addImage({ data: img("ag_chair"), x: 11.82, y: 2.56, w: 0.6, h: 0.6 });
+  txt(s, "투자\n심의\n위원회", { x: 11.58, y: 3.26, w: 1.1, h: 0.8, fontSize: 11, bold: true, color: INK, align: "center", lineSpacing: 15 });
+  mono(s, "사람이\n결정한다", { x: 11.58, y: 4.12, w: 1.1, h: 0.5, fontSize: 8, color: GLD, align: "center", lineSpacing: 10 });
+
+  /* 논문 원장 — 아래에서 판단층으로 */
+  panel(s, { x: 4.86, y: 5.0, w: 3.54, h: 0.86, fill: PANEL, line: PUR });
+  s.addImage({ data: img("ob_paper"), x: 5.02, y: 5.16, w: 0.38, h: 0.38 });
+  txt(s, "논문 원장 — 재현 통과분만 인용 가능", { x: 5.5, y: 5.12, w: 2.8, h: 0.28, fontSize: 10.5, bold: true, color: PUR });
+  mono(s, "ki.papers/2 · adopted | warned | retired", { x: 5.5, y: 5.42, w: 2.82, h: 0.22, fontSize: 7.6, color: MUT });
+  mono(s, "PART 2", { x: 7.5, y: 5.6, w: 0.8, h: 0.22, fontSize: 8, bold: true, color: PUR, align: "right" });
+  mono(s, "▲", { x: 5.02, y: 4.78, w: 0.4, h: 0.2, fontSize: 9, color: PUR });
+
+  /* 좌우 보조 설명 */
+  panel(s, { x: M, y: 5.0, w: 3.3, h: 0.86, fill: PANEL3, line: EDGE });
+  txt(s, "여기서만 네트워크를 쓴다", { x: M + 0.16, y: 5.08, w: 3.0, h: 0.26, fontSize: 10, bold: true, color: GRN });
+  txt(s, "하루 한 번, ingest-ops 하나. 그날의 유일한 원장 쓰기다.", { x: M + 0.16, y: 5.34, w: 3.02, h: 0.44, fontSize: 8.6, color: MUT });
+
+  panel(s, { x: 8.86, y: 5.0, w: 3.87, h: 0.86, fill: PANEL3, line: EDGE });
+  txt(s, "하나라도 걸리면 멈춘다", { x: 9.02, y: 5.08, w: 3.5, h: 0.26, fontSize: 10, bold: true, color: MAG });
+  txt(s, "반려된 절은 빈칸이 아니라 '반려됨 — 사유' 로 회의자료에 남는다.", { x: 9.02, y: 5.34, w: 3.56, h: 0.44, fontSize: 8.6, color: MUT });
+
+  panel(s, { x: M, y: 6.06, w: CW, h: 0.76, fill: PANEL3, line: EDGE });
+  txt(s, [
+    { text: "읽는 방향은 왼쪽에서 오른쪽, 한 방향뿐입니다. ", options: { bold: true, color: GLD } },
+    { text: "해석이 원장으로 되돌아가는 경로는 스키마에도 도구에도 없습니다.\n", options: { color: INK } },
+    { text: "PART 5 는 이 그림을 무엇으로 만드는가(기술 스택 · MCP 설계 · 하루 운영 · 로드맵)를 다룹니다.", options: { color: MUT } },
+  ], { x: M + 0.26, y: 6.06, w: CW - 0.52, h: 0.76, fontSize: 10.5, valign: "middle", lineSpacing: 17, fontFace: F, isTextBox: true, margin: 0 });
+}
+
+/* ═══ 데이터 조달 — 에이전트는 API 를 부르지 않는다 ═══ */
+function sSourcing() {
+  const s = slide();
+  header(s, "PART 3 · WHERE THE DATA COMES FROM", "에이전트는 API 를 부르지 않는다",
+         "에이전트가 쓰는 것은 API 가 아니라 API 가 가져다 놓은 것이다. 네트워크 호출과 판단은 시각이 다르다.");
+
+  /* 위: 16:10 */
+  panel(s, { x: M, y: 1.88, w: CW, h: 1.44, fill: "13241A", line: GRN });
+  s.addShape(pres.ShapeType.rect, { x: M, y: 1.88, w: 1.5, h: 1.44, fill: { color: GRN }, line: { type: "none" } });
+  mono(s, "16:10", { x: M, y: 1.96, w: 1.5, h: 0.4, fontSize: 18, bold: true, color: "0D1018", align: "center" });
+  mono(s, "네트워크\n있음", { x: M, y: 2.42, w: 1.5, h: 0.5, fontSize: 9, bold: true, color: "0D1018", align: "center", lineSpacing: 11 });
+  txt(s, "ingest-ops 단독 — 그날의 유일한 원장 쓰기", {
+    x: M + 1.7, y: 2.0, w: 6.0, h: 0.3, fontSize: 13.5, bold: true, color: GRN });
+  mono(s, "KRX · DART · ECOS · KIS · FRED   ──→   ki.sqlite", {
+    x: M + 1.7, y: 2.36, w: 6.4, h: 0.26, fontSize: 10.5, color: INK });
+  txt(s, "이때 받은 값이 기준일로 고정된다. 이후 모든 데스크가 같은 원장을 본다.", {
+    x: M + 1.7, y: 2.68, w: 6.4, h: 0.44, fontSize: 9.5, color: MUT });
+  ["price_daily", "index_daily", "instruments", "disclosure", "fundamental", "macro_daily", "alert_log"].forEach((t, i) => {
+    const x = 8.4 + (i % 2) * 2.16, y = 2.02 + Math.floor(i / 2) * 0.3;
+    mono(s, "· " + t, { x, y, w: 2.1, h: 0.26, fontSize: 8.2, color: MUT });
+  });
+
+  mono(s, "════════════════════  하루의 경계  ════════════════════", {
+    x: M, y: 3.44, w: CW, h: 0.24, fontSize: 9, bold: true, color: DIM, align: "center" });
+
+  /* 아래: 17:00 */
+  panel(s, { x: M, y: 3.8, w: CW, h: 1.62, fill: PANEL, line: BLU });
+  s.addShape(pres.ShapeType.rect, { x: M, y: 3.8, w: 1.5, h: 1.62, fill: { color: BLU }, line: { type: "none" } });
+  mono(s, "17:00", { x: M, y: 3.92, w: 1.5, h: 0.4, fontSize: 18, bold: true, color: "0D1018", align: "center" });
+  mono(s, "네트워크\n없음", { x: M, y: 4.38, w: 1.5, h: 0.5, fontSize: 9, bold: true, color: "0D1018", align: "center", lineSpacing: 11 });
+  txt(s, "데스크 19개 — 원장만 읽는다", { x: M + 1.7, y: 3.94, w: 5.0, h: 0.3, fontSize: 13.5, bold: true, color: BLU });
+  const tools = ["ledger.facts", "ledger.candles", "ledger.factors", "ledger.calendar",
+                 "ledger.macro", "ledger.disclosure", "ledger.quality", "ledger.papers"];
+  tools.forEach((t, i) => {
+    const x = M + 1.7 + (i % 4) * 2.62, y = 4.32 + Math.floor(i / 4) * 0.34;
+    s.addShape(pres.ShapeType.rect, { x, y, w: 2.5, h: 0.28, fill: { color: PANEL2 }, line: { type: "none" } });
+    mono(s, t, { x: x + 0.1, y, w: 2.3, h: 0.28, fontSize: 8.4, bold: true, color: GRN, valign: "middle" });
+  });
+  txt(s, "계산은 이미 끝나 있다 — 데스크는 읽고 서술할 뿐, 숫자를 만들지 않는다.", {
+    x: M + 1.7, y: 5.04, w: 10.2, h: 0.3, fontSize: 9.5, italic: true, color: MUT });
+
+  /* 예외 · 이유 */
+  panel(s, { x: M, y: 5.62, w: 4.5, h: 1.2, fill: "241E10", line: AMB });
+  txt(s, "유일한 예외 — DART 원문", { x: M + 0.2, y: 5.74, w: 4.1, h: 0.28, fontSize: 11.5, bold: true, color: AMB });
+  txt(s, "원장에는 접수번호와 제목까지만 있다. 발행조건·전환가·리픽싱 조항은 원문에 있으므로, 접수번호로 지정된 그 문서 한 건만 연다. 검색이 아니라 지정 조회다.", {
+    x: M + 0.2, y: 6.04, w: 4.14, h: 0.7, fontSize: 8.8, color: INK });
+
+  const why = [["재생 가능", "같은 입력 → 같은 봉투"], ["기준일 고정", "모든 데스크가 같은 날을 본다"],
+               ["오염 차단", "장중 값이 일봉에 안 섞인다"], ["감사 가능", "언제 어디서 왔는지 남는다"]];
+  why.forEach((w, i) => {
+    const x = 5.32 + (i % 2) * 3.74, y = 5.62 + Math.floor(i / 2) * 0.62;
+    panel(s, { x, y, w: 3.6, h: 0.54, fill: PANEL3, line: EDGE });
+    s.addImage({ data: img("ic_ok"), x: x + 0.14, y: y + 0.19, w: 0.16, h: 0.16 });
+    mono(s, w[0], { x: x + 0.38, y, w: 1.1, h: 0.54, fontSize: 9, bold: true, color: GRN, valign: "middle" });
+    txt(s, w[1], { x: x + 1.5, y, w: 2.0, h: 0.54, fontSize: 8.6, color: MUT, valign: "middle" });
+  });
+
+  mono(s, "숫자는 원장에서, 원문은 링크로.", {
+    x: 5.32, y: 6.88, w: 7.4, h: 0.26, fontSize: 10.5, bold: true, color: GLD, align: "center" });
+}
+
+
+/* ═══ 구현 규격 — 코드로 옮기기 전에 정할 값 ═══ */
+function sSpec() {
+  const s = slide();
+  header(s, "PART 5 · IMPLEMENTATION SPEC", "코드로 옮기기 전에 정해야 할 값",
+         "아래가 비어 있으면 구현할 때 임의로 정하게 된다. 제안값이며, 착수 전에 확정해야 한다.");
+
+  /* ① 재현 관문 */
+  panel(s, { x: M, y: 1.86, w: 6.1, h: 2.42, fill: PANEL, line: GRN });
+  mono(s, "① 재현 관문 — 판정 기준", { x: M + 0.2, y: 1.98, w: 5.6, h: 0.26, fontSize: 11, bold: true, color: GRN });
+  const rep = [
+    [2.30, "유니버스",  "KOSDAQ 전종목 · 관리종목 · 거래정지 · 스팩 제외", 0.28],
+    [2.58, "최소 표본", "종목 n ≥ 200  AND  영업일 ≥ 500 (미달 시 계산 거부)", 0.28],
+    [2.86, "포트폴리오", "팩터값 5분위 · 월말 리밸런싱 · 동일가중", 0.28],
+    [3.14, "검정 통계", "Q5 − Q1 스프레드 · Newey-West 보정 t", 0.28],
+    [3.44, "판정",      "|t| ≥ 2.0 & 부호 일치 → 재현됨 · 부호 반대 → 방향 반대\n|t| < 2.0                        → 판정 불가", 0.40],
+    [3.90, "룩백",      "최근 3년 (구간이 바뀌면 재판정 · 이력은 append)", 0.28],
+  ];
+  rep.forEach(r => {
+    mono(s, r[1], { x: M + 0.2, y: r[0], w: 1.3, h: 0.26, fontSize: 8.6, bold: true, color: CYN });
+    mono(s, r[2], { x: M + 1.56, y: r[0] - 0.01, w: 4.42, h: r[3], fontSize: 8.2, color: INK, lineSpacing: 10.5 });
+  });
+
+  /* ② 트리거 임계값 */
+  panel(s, { x: 6.86, y: 1.86, w: 5.87, h: 2.42, fill: PANEL, line: AMB });
+  mono(s, "② 트리거 임계값", { x: 7.06, y: 1.98, w: 5.4, h: 0.26, fontSize: 11, bold: true, color: AMB });
+  const trg = [
+    ["DART 신규 공시", "dilution · risk 태그가 붙은 건"],
+    ["종가 급변", "|일간수익률| ≥ 8%"],
+    ["거래대금 급증", "20일 중앙값 대비 ≥ 3배"],
+    ["회수계획 변동", "exit_plan.csv 행 변경 감지"],
+    ["락업 만료 임박", "D-30 진입"],
+    ["재현 재검", "recheck_due ≤ 오늘 (오래된 순 · 일 1편)"],
+    ["신선도 경보", "stale_days ≥ 3 영업일"],
+  ];
+  trg.forEach((t, i) => {
+    const y = 2.32 + i * 0.27;
+    s.addShape(pres.ShapeType.rect, { x: 7.06, y, w: 5.5, h: 0.23, fill: { color: i % 2 ? PANEL3 : PANEL2 }, line: { type: "none" } });
+    txt(s, t[0], { x: 7.16, y, w: 1.9, h: 0.23, fontSize: 8.4, bold: true, color: INK, valign: "middle" });
+    mono(s, t[1], { x: 9.1, y, w: 3.4, h: 0.23, fontSize: 8, color: MUT, valign: "middle" });
+  });
+
+  /* ③ 봉투 필수 필드 */
+  panel(s, { x: M, y: 4.44, w: 6.1, h: 2.06, fill: PANEL, line: PUR });
+  mono(s, "③ 봉투 — 필수 필드 (게이트가 검사)", { x: M + 0.2, y: 4.56, w: 5.6, h: 0.26, fontSize: 11, bold: true, color: PUR });
+  mono(s, [
+    'required: claim · unit · asof · stale_days ·',
+    '          source_grade · sources[] · limits[] ·',
+    '          desk · instance',
+    '',
+    'value 는 null 허용 — 단 null 이면 reason 필수',
+    'method.paper 가 있으면 method.replication 필수',
+    'source_grade ∈ {1차, 참고, 방법론, 사내, 해석}',
+    '  └ 에이전트 산출은 항상 "해석" (승격 불가)',
+  ].join("\n"), { x: M + 0.2, y: 4.88, w: 5.66, h: 1.5, fontSize: 8.2, color: "A9C8F0", lineSpacing: 11, valign: "top" });
+
+  /* ④ 예산 · 판정 어휘 */
+  panel(s, { x: 6.86, y: 4.44, w: 5.87, h: 2.06, fill: PANEL, line: MAG });
+  mono(s, "④ 예산 상한 · 판정 어휘 차단 목록", { x: 7.06, y: 4.56, w: 5.4, h: 0.26, fontSize: 11, bold: true, color: MAG });
+  [["T1 경량", "8K 토큰 · 도구 3회"], ["T2 표준", "32K · 12회"], ["T3 상위", "128K · 40회"]].forEach((t, i) => {
+    const x = 7.06 + i * 1.9;
+    s.addShape(pres.ShapeType.rect, { x, y: 4.9, w: 1.78, h: 0.44, fill: { color: PANEL2 }, line: { type: "none" } });
+    mono(s, t[0], { x: x + 0.1, y: 4.92, w: 1.6, h: 0.2, fontSize: 8.2, bold: true, color: AMB });
+    mono(s, t[1], { x: x + 0.1, y: 5.12, w: 1.62, h: 0.2, fontSize: 7.6, color: MUT });
+  });
+  mono(s, "초과 시 '미완' 으로 기록 — 조용히 넘어가지 않는다", {
+    x: 7.06, y: 5.4, w: 5.4, h: 0.22, fontSize: 8, italic: true, color: DIM });
+  mono(s, "게이트 ① 차단 어휘 (정규식)", { x: 7.06, y: 5.7, w: 5.4, h: 0.22, fontSize: 8.6, bold: true, color: MAG });
+  mono(s, "매수 · 매도 · 비중확대 · 비중축소 · 목표주가 · 적정주가\n투자의견 · 저평가 · 고평가 · 유망 · 추천 · 상승여력", {
+    x: 7.06, y: 5.94, w: 5.44, h: 0.48, fontSize: 8, color: INK, lineSpacing: 11 });
+
+  panel(s, { x: M, y: 6.64, w: CW, h: 0.46, fill: PANEL3, line: EDGE });
+  txt(s, [
+    { text: "이 값들이 Phase 1 의 실제 산출물이다. ", options: { bold: true, color: GLD } },
+    { text: "코드보다 먼저 한 장으로 합의하고, 바뀌면 이 장을 고친다 — 코드에 흩어 두지 않는다.", options: { color: INK } },
+  ], { x: M + 0.26, y: 6.64, w: CW - 0.52, h: 0.46, fontSize: 10, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
+}
+
+/* ══════════════════ 슬라이드 순서 (38장) ══════════════════ */
+sTitle();          sExec();        sSystemMap();
 /* PART 1 — 지금 */
 sAsIs();           sWhy();         sRules();
 sRefix();          sNotExRight();  sLiquidity();
@@ -1677,11 +1911,12 @@ sRefix();          sNotExRight();  sLiquidity();
 sProblem();        sPipeline();    sReplication();  sDecay();     sLedger();
 /* PART 3 — 조직과 에이전트 (20 데스크) */
 sOrg();            sSectionMap();  sDesk1();        sDesk2();     sDesk3();
+sSourcing();
 sStandingSpawn();  sLifecycle();   sTriggers();     sLoad();      sEscalation();
 /* PART 4 — 통제 */
 sWall();           sRbac();        sEnvelope();     sGates();     sScorecard();
 /* PART 5 — 실행 */
-sStack();          sMcp();         sDay();          sRoadmap();   sRisk();   sNext();
+sStack();          sMcp();         sSpec();         sDay();       sRoadmap();  sRisk();   sNext();
 sAppendix();
 
 pres.writeFile({ fileName: process.argv[2] || "deck2.pptx" })
