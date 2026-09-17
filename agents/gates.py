@@ -265,6 +265,7 @@ def _env(**over) -> dict:
         desk="q2-disposal", asof="2026-09-11", stale_days=2,
         source_grade="해석", sources=["KRX/일별매매정보"], subject="000660",
         method={"paper": "amihud2002", "paper_state": "unverified"},
+        read=[E.observation("KRX/일별매매정보", "000660.close", 88.0, "2026-09-11")],
         limits=["논문 표본은 미국 상장주 — 코스닥 외삽의 근거가 아니다"],
     )
     e["reviewed_by"] = ["risk", "compliance"]

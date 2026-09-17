@@ -81,6 +81,20 @@ def new_instance(desk: str, at: str, subject: str, salt: str = "") -> str:
     return f"{slug.strip('-')}-{tail}"
 
 
+def observation(source: str, key: str, value, asof: str) -> dict:
+    """관측 한 줄 — **그때 원장에 무엇이 적혀 있었는가.**
+
+    이것이 재생 가능성의 전부다. 원장은 `INSERT OR REPLACE` 로 덮어써진다 —
+    DART 정정공시가 오면 같은 칸이 조용히 바뀐다. 그러면 나중에 같은 질문을
+    다시 던져도 다른 답이 나오고, **"에이전트가 틀렸다"와 "데이터가 바뀌었다"를
+    구분할 수 없다.**
+
+    원장을 양방향 시간 장부로 바꾸는 것은 큰 공사다. 그 대신 봉투가 자기가 읽은
+    것을 적어 두면 같은 구분이 선다 — 지금 원장과 대조하면 어느 쪽이 움직였는지
+    가 바로 나온다."""
+    return {"source": source, "key": key, "value": value, "asof": asof}
+
+
 def _walk_keys(obj, path=()):
     """봉투 전체를 훑으며 (경로, 키) 를 낸다."""
     if isinstance(obj, dict):
@@ -114,6 +128,27 @@ def validate(env: dict) -> list[str]:
     p: list[str] = []
     if not isinstance(env, dict):
         return ["봉투가 dict 가 아닙니다"]
+
+    # ── 읽은 것 (재생 가능성) ──
+    rd = env.get("read")
+    if rd is not None:
+        if not isinstance(rd, list):
+            p.append("read 는 관측의 리스트여야 합니다")
+        else:
+            for i, o in enumerate(rd):
+                if not isinstance(o, dict):
+                    p.append(f"read[{i}] 가 dict 가 아닙니다")
+                    continue
+                for k in ("source", "key", "asof"):
+                    if not str(o.get(k) or "").strip():
+                        p.append(f"read[{i}].{k} 가 비어 있습니다")
+                if "value" not in o:
+                    p.append(f"read[{i}].value 가 없습니다 (None 이어도 적습니다)")
+    # 값을 냈으면 무엇을 읽고 냈는지 적어야 한다. 적지 않으면 나중에 그 값이
+    # 왜 그랬는지 되짚을 수 없고, 리플레이는 말로만 남는다.
+    if env.get("value") is not None and not rd:
+        p.append("value 가 있으면 read 에 무엇을 읽었는지 적어야 합니다 "
+                 "— 적지 않으면 나중에 재생할 수 없습니다")
 
     # ── 있어야 하는 것 ──
     for k in ("claim", "asof", "source_grade", "limits", "desk", "instance"):
@@ -202,7 +237,7 @@ def promote(env: dict, to: str) -> tuple[bool, str]:
 
 def make(claim, *, desk, asof, source_grade, limits, value=None, unit=None,
          sources=None, method=None, reason=None, subject="", tier="T2",
-         stale_days=None, salt="") -> dict:
+         stale_days=None, salt="", read=None) -> dict:
     """봉투를 짓는다. 지어낸 값을 채워 넣지 않는다 — 빠진 것은 빠진 채로 둔다."""
     env = {
         "schema": SCHEMA,
@@ -214,6 +249,7 @@ def make(claim, *, desk, asof, source_grade, limits, value=None, unit=None,
         "source_grade": source_grade,
         "sources": list(sources or []),
         "method": method,
+        "read": list(read or []),
         "limits": list(limits or []),
         "reason": reason,
         "desk": desk,
@@ -234,6 +270,8 @@ def _sample() -> dict:
         source_grade="해석", sources=["KRX/일별매매정보"], subject="000660",
         method={"paper": "amihud2002", "paper_state": "unverified",
                 "assumes": {"participation": 0.15}},
+        read=[observation("KRX/일별매매정보", "000660.close", 88.0, "2026-09-11"),
+              observation("KRX/일별매매정보", "000660.value", 1.0e8, "2026-09-11")],
         limits=["논문 표본은 미국 상장주 — 코스닥 외삽 근거가 아니다"],
     )
 
@@ -332,6 +370,31 @@ def selftest() -> int:
         _assert(a != b)                 # 다른 실행이면 다르다
         _assert(_INSTANCE.match(a))
     check("인스턴스 ID 는 결정적이고 실행마다 다르다", _instance_unique)
+
+    def _read_required_with_value():
+        """값을 냈으면 무엇을 읽고 냈는지 적어야 한다."""
+        e = _sample(); e["read"] = []
+        _assert(any("read" in x for x in validate(e)), validate(e))
+        # 값이 없으면 읽은 것이 없어도 된다 — 사유만 있으면 성립한다.
+        e2 = _sample(); e2["read"] = []; e2["value"] = None
+        e2["reason"] = "일봉이 12개뿐입니다"
+        _assert(validate(e2) == [], validate(e2))
+    check("값을 냈으면 읽은 것을 적어야 한다 (재생 가능성)", _read_required_with_value)
+
+    def _read_shape():
+        e = _sample()
+        e["read"] = [{"source": "KRX", "key": "k"}]       # asof · value 없음
+        probs = validate(e)
+        _assert(any("asof" in x for x in probs), probs)
+        _assert(any("value" in x for x in probs), probs)
+    check("관측은 출처·키·기준일·값을 모두 적는다", _read_shape)
+
+    def _read_none_value_ok():
+        """못 읽은 것도 적는다 — 0 으로 채우지 않고 None 으로 적는다."""
+        e = _sample()
+        e["read"] = [observation("DART/재무", "000660.2026Q2.rev", None, "2026Q2")]
+        _assert(validate(e) == [], validate(e))
+    check("못 읽은 값도 None 으로 적는다", _read_none_value_ok)
 
     def _asof_shape():
         e = _sample(); e["asof"] = "2026/09/11"

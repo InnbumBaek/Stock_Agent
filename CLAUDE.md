@@ -77,6 +77,21 @@ OpenAlex · Crossref)에서 후보를 쌓고, `--adopt` 이 발행 정보를 Cro
 `method_papers` 에 따로 둔다. 팩터 출처와 섞으면 "모든 팩터가 실재하는 논문을
 인용하는가" 검사가 팩터와 상관없는 논문까지 세게 되어 뜻이 없어진다.
 
+### 4-b. 봉투는 자기가 읽은 것을 적는다
+
+원장은 `INSERT OR REPLACE` 로 덮어써진다. DART 정정공시가 오면 같은 칸이
+조용히 바뀌고 옛 값은 남지 않는다. 석 달 뒤에 같은 질문을 다시 던지면 다른
+답이 나오는데, 그때 **"에이전트가 틀렸다"와 "데이터가 바뀌었다"를 구분할 수
+없다.** 자기 이력을 설명하지 못하는 시스템이 된다.
+
+원장을 양방향 시간 장부로 바꾸는 것은 측정층을 건드리는 큰 공사다. 그래서
+**봉투 쪽에서 푼다** — 값을 낸 봉투는 `read` 에 무엇을 읽었는지(출처·키·값·
+기준일) 적는다. 지금 원장과 대조하면 어느 쪽이 움직였는지가 바로 나온다
+(`agents/replay.py`).
+
+못 읽은 값도 `null` 로 적는다. 빼 버리면 "안 읽었다"와 "읽었는데 없더라"가
+구분되지 않는다.
+
 ### 5. 대외비·자격증명을 저장소에 넣지 마라
 
 `ki.sqlite` · `watchlist.csv` · `exit_plan.csv` · `positions.csv` · `out/` ·
@@ -149,7 +164,7 @@ OpenAlex · Crossref)에서 후보를 쌓고, `--adopt` 이 발행 정보를 Cro
 
 ```bash
 cd stock-monitor && python ki_monitor.py selftest   # 128개 (키·네트워크 불필요)
-python agents/selftest.py                           # 151개 (판단층)
+python agents/selftest.py                           # 166개 (판단층)
 python docs/audit.py                                # 저장소 전반
 ```
 

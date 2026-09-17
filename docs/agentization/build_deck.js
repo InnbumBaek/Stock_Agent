@@ -605,7 +605,7 @@ function sEnvelope() {
   header(s, "PART 4 · ENVELOPE v2", "봉투에 재현 결과가 함께 실린다",
          "논문 키만 다는 것으로는 부족하다. 그 논문이 우리 표본에서 어떻게 나왔는지가 같이 가야 한다.");
 
-  panel(s, { x: M, y: 1.88, w: 6.7, h: 4.24, fill: "0A1020", line: EDGE });
+  panel(s, { x: M, y: 1.84, w: 6.7, h: 4.62, fill: "0A1020", line: EDGE });
   mono(s, [
     '{',
     '  "claim":        "처분 소요일수 12.4 영업일",',
@@ -628,6 +628,9 @@ function sEnvelope() {
     '    "assumes": { "participation": 0.15 }',
     '  },',
     '',
+    '  "read": [{"key": "000660.close", "value": 88.0,     // \u2190 v2',
+    '            "asof": "2026-09-11"}],',
+    '',
     '  "limits": ["논문 표본은 미국 상장주 — 코스닥 외삽 근거 아님"],',
     '',
     '  "desk": "q3-execution",',
@@ -635,10 +638,10 @@ function sEnvelope() {
     '  "tier": "T2",  "escalated_from": null,',
     '  "reviewed_by": ["risk", "compliance"]',
     '}',
-  ].join("\n"), { x: M + 0.24, y: 2.02, w: 6.25, h: 3.98, fontSize: 8.0, color: "A9C8F0", lineSpacing: 10.3, valign: "top" });
+  ].join("\n"), { x: M + 0.24, y: 1.96, w: 6.25, h: 4.42, fontSize: 7.4, color: "A9C8F0", lineSpacing: 9.2, valign: "top" });
 
   const f = [
-    ["replication", "논문이 우리 표본에서 어떻게 나왔는가", "verdict 가 '재현됨'이 아니면 그 팩터는 리포트에서 경고와 함께 나가거나 아예 빠진다.", GRN],
+    ["read", "무엇을 읽고 이 값을 냈는가", "정정공시가 오면 원장의 같은 칸이 덮어써진다. 이것이 있어야 '틀렸다'와 '바뀌었다'가 갈린다.", GRN],
     ["paper_state", "그 논문이 어느 상태인가", "retired · 방향 반대는 반려. unverified 는 통과하되 '미검증' 표시가 함께 나간다.", CYN],
     ["instance", "어느 인스턴스가 만들었는가", "이 ID 로 같은 실행을 다시 띄워 결과를 대조할 수 있다 — 재생 가능성의 열쇠.", PUR],
     ["tier · escalated_from", "어느 급이 처리했고 왜 올라왔는가", "승격이 잦은 지점이 이 시스템이 약한 곳이다. 스코어카드가 이 분포를 본다.", AMB],
@@ -729,8 +732,8 @@ function sScorecard() {
   panel(s, { x: M, y: 5.02, w: CW, h: 1.8, fill: PANEL3, line: EDGE });
   txt(s, "리플레이 — 왜 그렇게 읽었는가를 되짚는다", { x: M + 0.26, y: 5.16, w: 6.0, h: 0.3, fontSize: 14, bold: true, color: GLD });
   const rp = [
-    ["봉투에 instance ID 가 있다", "어느 인스턴스가 어떤 입력으로 만든 문장인지 특정된다."],
-    ["인스턴스는 무상태다", "같은 입력을 다시 넣으면 같은 봉투가 나와야 한다 — 안 나오면 그것이 신호다."],
+    ["봉투가 읽은 것을 적는다", "원장은 정정이 오면 같은 칸을 덮어쓴다. 봉투의 read 와 대조해야 '틀렸다'와 '바뀌었다'가 갈린다."],
+    ["instance ID 로 특정된다", "어느 인스턴스가 어떤 입력으로 만든 문장인지 좁혀진다. 무상태라 같은 입력이면 같은 봉투가 나와야 한다."],
     ["논문 원장은 append-only", "그날의 재현 판정이 남아 있어, 지금 기준이 아니라 그때 기준으로 되짚을 수 있다."],
   ];
   rp.forEach((r, i) => {
@@ -1243,7 +1246,7 @@ function sAppendix() {
     '├─ docs/                 audit.py 에 정의 대조 [10] 추가',
     '├─ RUN_ALL · SCHEDULE    월 07:40 주간 재현 한 줄 추가',
     '│',
-    '├─ agents/               ← 들어감 (자체 검사 151개)',
+    '├─ agents/               ← 들어감 (자체 검사 166개)',
     '│   ├─ envelope.py          봉투 스키마 · 검증기      16',
     '│   ├─ papers.py            논문 장부 ki.papers/2    19',
     '│   ├─ replication.py       재현 러너 (결정적)     20',
@@ -1253,7 +1256,8 @@ function sAppendix() {
     '│   ├─ triggers.py          트리거 스캐너 · 소집      16',
     '│   ├─ cycle.py             주간 논문 사이클         13',
     '│   ├─ run_day.py           소집 → 게이트 → 발행     14',
-    '│   └─ scorecard.py         계측 (고치지는 않는다)    11',
+    '│   ├─ scorecard.py         계측 (고치지는 않는다)    11',
+    '│   └─ replay.py            되짚기 · 원장 대조         12',
     '│',
     '└─ .claude/',
     '    ├─ agents/              데스크 9개 정의',
@@ -1284,7 +1288,7 @@ function sAppendix() {
     txt(s, n[0], { x: 8.0, y: y + 0.12, w: 4.5, h: 0.3, fontSize: 12, bold: true, color: n[2] });
     txt(s, n[1], { x: 7.74, y: y + 0.44, w: 4.76, h: 0.56, fontSize: 9.5, color: MUT });
   });
-  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 9 · 데스크 정의 9 · 스킬 5 · 자체 검사 151개 · ki_monitor.py 변경 0줄");
+  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 10 · 데스크 정의 9 · 스킬 5 · 자체 검사 166개 · ki_monitor.py 변경 0줄");
 }
 
 
