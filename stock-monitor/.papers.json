@@ -1,7 +1,7 @@
 {
-  "schema": "ki.papers/1",
+  "schema": "ki.papers/2",
   "verified": "2026-09-05",
-  "note": "팩터가 근거로 삼는 논문. 연도순으로 관리하며, 새 연도는 docs/fetch_papers.py --harvest 로 훑어 후보 파일에 쌓고, 네 질문 중 하나를 바꿀 때만 여기로 채택합니다.",
+  "note": "팩터가 근거로 삼는 논문 장부. state 는 unverified·adopted·warned·retired 네 가지이고, replication 은 덮어쓰지 않고 쌓는다. 은퇴본도 지우지 않는다 — 성립하지 않는다는 것도 측정 결과이고, 지우면 같은 논문을 다시 주워 온다. 새 논문은 docs/fetch_papers.py --harvest 로 후보에 쌓고, 사람이 네 질문 중 하나에 걸릴 때만 이리로 들인다.",
   "papers": {
     "roll1984": {
       "authors": "Roll, R.",
@@ -13,7 +13,14 @@
       "doi": "10.1111/j.1540-6261.1984.tb03897.x",
       "checked": "2026-09-05 · onlinelibrary.wiley.com · ideas.repec.org",
       "question": "q2",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     },
     "j1990": {
       "authors": "Jegadeesh, N.",
@@ -25,7 +32,14 @@
       "doi": "10.1111/j.1540-6261.1990.tb05110.x",
       "checked": "2026-09-05 · onlinelibrary.wiley.com · ideas.repec.org",
       "question": "q1",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     },
     "ritter1991": {
       "authors": "Ritter, J. R.",
@@ -37,7 +51,14 @@
       "doi": "10.1111/j.1540-6261.1991.tb03743.x",
       "checked": "2026-09-05 · onlinelibrary.wiley.com · site.warrington.ufl.edu(저자 사이트 원문)",
       "question": "q4",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     },
     "jt1993": {
       "authors": "Jegadeesh, N. and Titman, S.",
@@ -49,7 +70,14 @@
       "doi": "10.1111/j.1540-6261.1993.tb04702.x",
       "checked": "2026-09-05 · onlinelibrary.wiley.com · econpapers.repec.org",
       "question": "q1",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     },
     "dnr1998": {
       "authors": "Datar, V. T., Naik, N. Y. and Radcliffe, R.",
@@ -61,7 +89,14 @@
       "doi": "10.1016/S1386-4181(97)00004-9",
       "checked": "2026-09-05 · sciencedirect.com · ideas.repec.org",
       "question": "q2",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     },
     "ac2000": {
       "authors": "Almgren, R. and Chriss, N.",
@@ -73,7 +108,14 @@
       "doi": null,
       "checked": "2026-09-05 · risk.net(권·호 확인) (DOI 없음 — Journal of Risk)",
       "question": "q3",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     },
     "fh2001": {
       "authors": "Field, L. C. and Hanka, G.",
@@ -85,7 +127,14 @@
       "doi": "10.1111/0022-1082.00334",
       "checked": "2026-09-05 · onlinelibrary.wiley.com · papers.ssrn.com",
       "question": "q2",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     },
     "amihud2002": {
       "authors": "Amihud, Y.",
@@ -97,7 +146,14 @@
       "doi": "10.1016/S1386-4181(01)00024-6",
       "checked": "2026-09-05 · cis.upenn.edu(원문 PDF) · sciencedirect.com",
       "question": "q2",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     },
     "gh2004": {
       "authors": "George, T. J. and Hwang, C.-Y.",
@@ -109,7 +165,14 @@
       "doi": "10.1111/j.1540-6261.2004.00695.x",
       "checked": "2026-09-05 · onlinelibrary.wiley.com",
       "question": "q1",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     },
     "athl2005": {
       "authors": "Almgren, R., Thum, C., Hauptmann, E. and Li, H.",
@@ -121,7 +184,14 @@
       "doi": null,
       "checked": "2026-09-05 · researchgate.net · scispace.com (DOI 없음 — Risk 지 기고문)",
       "question": "q3",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     },
     "ahxz2006": {
       "authors": "Ang, A., Hodrick, R. J., Xing, Y. and Zhang, X.",
@@ -133,7 +203,14 @@
       "doi": "10.1111/j.1540-6261.2006.00836.x",
       "checked": "2026-09-05 · onlinelibrary.wiley.com · business.columbia.edu(원문 PDF)",
       "question": "q4",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     },
     "cs2012": {
       "authors": "Corwin, S. A. and Schultz, P.",
@@ -145,7 +222,14 @@
       "doi": "10.1111/j.1540-6261.2012.01729.x",
       "checked": "2026-09-05 · onlinelibrary.wiley.com · econpapers.repec.org",
       "question": "q2",
-      "adopted": true
+      "adopted": true,
+      "state": "unverified",
+      "state_reason": "v1 에서 사람이 채택했으나 우리 표본으로 재현한 기록이 없음",
+      "state_at": "2026-09-17",
+      "replication": [],
+      "half_life_d": 365,
+      "recheck_due": null,
+      "limits": []
     }
   },
   "questions": {
@@ -153,5 +237,41 @@
     "q2": "팔 수 있는가 — 처분 여건·거래비용",
     "q3": "어떻게 팔 것인가 — 실행",
     "q4": "지금이 그 때인가 — 시점·국면"
+  },
+  "migrated_at": "2026-09-17",
+  "method_papers": {
+    "note": "이 도구 자신의 계산 규칙이 근거로 삼는 논문. 종목 팩터의 출처가 아니라 관문·추정량의 출처이므로 papers 와 나누어 둔다. ki_monitor.papers() 는 이쪽을 보지 않는다 — 팩터 인용과 섞이면 '모든 팩터가 실재하는 논문을 인용하는가' 검사의 뜻이 흐려진다.",
+    "hlz2016": {
+      "authors": "Harvey, C. R., Liu, Y. and Zhu, H.",
+      "year": 2016,
+      "title": "… and the Cross-Section of Expected Returns",
+      "journal": "The Review of Financial Studies",
+      "volume": "29(1)",
+      "pages": "5-68",
+      "doi": "10.1093/rfs/hhv059",
+      "used_for": "재현 관문의 유의 임계 t ≥ 3.0 (agents/replication.py T_MIN)",
+      "claim": "수백 개의 팩터가 이미 발표된 뒤라면, 새 팩터는 다중검정을 보정한 더 높은 문턱을 넘어야 한다 — 통상의 t ≥ 2.0 으로는 부족하다.",
+      "limits": [
+        "논문이 다루는 것은 미국 주식 팩터 문헌 전체의 검정 횟수다. 우리 저장소의 주 1회 사이클과 검정 횟수가 같지 않다 — 문턱의 근거로 빌려 쓴 것이지 우리 표본에 맞춰 계산한 값이 아니다.",
+        "3.0 은 보정 방식·가정한 검정 횟수에 따라 달라지는 값이다. 고정 상수로 읽지 말고 재검 대상으로 둔다."
+      ],
+      "checked": "2026-09-17 · academic.oup.com(RFS 29(1) 5-68) · nber.org(w20592) · ideas.repec.org — 세 곳의 서지가 일치. Crossref 재대조는 이 환경의 이그레스 정책에 막혀 하지 못했다 (docs/fetch_papers.py --adopt 로 네트워크가 열린 곳에서 다시 대조할 것)."
+    },
+    "nw1987": {
+      "authors": "Newey, W. K. and West, K. D.",
+      "year": 1987,
+      "title": "A Simple, Positive Semi-Definite, Heteroskedasticity and Autocorrelation Consistent Covariance Matrix",
+      "journal": "Econometrica",
+      "volume": "55(3)",
+      "pages": "703-708",
+      "doi": "10.2307/1913610",
+      "used_for": "재현 러너의 표준오차 추정 (agents/replication.py newey_west_t)",
+      "claim": "자기상관과 이분산이 있는 표본에서 일치추정량이 되는 공분산 추정량. 구성상 양반정치(positive semi-definite)다.",
+      "limits": [
+        "시차(lag) 선택 규칙은 이 논문이 아니라 Newey-West(1994)의 경험식을 썼다.",
+        "점근 이론이다. 월 36개 같은 짧은 표본에서 정확하다는 근거가 아니다 — 그래서 최소 표본을 따로 두고 못 미치면 계산을 거부한다."
+      ],
+      "checked": "2026-09-17 · econometricsociety.org · jstor.org/stable/1913610 · econpapers.repec.org — 세 곳의 서지가 일치. Crossref 재대조는 이 환경의 이그레스 정책에 막혀 하지 못했다."
+    }
   }
 }

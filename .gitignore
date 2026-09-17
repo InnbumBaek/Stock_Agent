@@ -67,6 +67,15 @@ Thumbs.db
 docs/proposals/
 .api_verified.tmp
 
+# ── 데스크 산출물 (agents) ──────────────────────────────────────
+# 봉투에는 포트폴리오사 실명과 회수 진척이 담깁니다. stock-monitor/out/ 과
+# 같은 등급입니다 — 저작권이 아니라 영업비밀·미공개중요정보 문제입니다.
+agents/out/
+agents/envelopes/
+*.envelope.json
+# 재현 판정 원본. 장부(.papers.json)에 요약만 남기고 원본은 로컬에 둡니다.
+agents/replication_runs/
+
 # ── 자동 실행 기록 ──────────────────────────────────────────────
 # 실행 로그. 재생성되고, 종목명이 찍힐 수 있습니다.
 logs/

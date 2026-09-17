@@ -237,15 +237,19 @@ function sReplication() {
     s.addImage({ data: img(e[4]), x: 11.24, y: y + 0.14, w: 0.17, h: 0.17 });
     mono(s, e[2], { x: 11.48, y, w: 1.0, h: 0.44, fontSize: 9.5, bold: true, color: e[3], valign: "middle" });
   });
-  txt(s, "jt1993 모멘텀은 코스닥에서 방향이 뒤집힌다 — 널리 알려진 사실이다.\n인용은 하되 \"우리 표본에서는 반대\"가 값에 붙어 나간다.", {
-    x: 7.64, y: 5.10, w: 4.9, h: 0.5, fontSize: 9.5, italic: true, color: AMB, lineSpacing: 13 });
-  txt(s, "판정은 매번 표본 구간과 함께 기록된다. 같은 논문이라도 구간이 바뀌면 판정이 바뀔 수 있고, 그 변화 자체가 신호다.", {
-    x: 7.64, y: 5.68, w: 4.9, h: 0.5, fontSize: 9.5, color: MUT, lineSpacing: 13 });
+  panel(s, { x: 7.64, y: 4.90, w: 4.9, h: 1.24, fill: "132318", line: GRN });
+  mono(s, "통과 임계  |t| \u2265 3.0", { x: 7.80, y: 4.97, w: 3.0, h: 0.24, fontSize: 11, bold: true, color: GRN, valign: "top" });
+  txt(s, "2.0 은 검정을 한 번 할 때의 값이다. 주 1회 사이클이면 연 150회쯤 되고, 그때 2.0 은 효과 없는 팩터를 해마다 7~8개 통과시킨다 — '논문 근거 있음' 딱지를 달고서.", {
+    x: 7.80, y: 5.22, w: 4.58, h: 0.46, fontSize: 8.6, color: INK, lineSpacing: 10.4, valign: "top" });
+  txt(s, "표준오차는 Newey-West 로 잰다. 월간 스프레드는 자기상관이 있어 보통 표준오차를 쓰면 t 가 과장된다.", {
+    x: 7.80, y: 5.66, w: 4.58, h: 0.32, fontSize: 8.6, color: MUT, lineSpacing: 10.4, valign: "top" });
+  mono(s, "Harvey\u00b7Liu\u00b7Zhu (2016) RFS 29(1) 5-68   \u00b7   Newey\u00b7West (1987) ECTA 55(3)", {
+    x: 7.80, y: 5.94, w: 4.58, h: 0.18, fontSize: 7.2, color: DIM, valign: "top" });
 
   panel(s, { x: M, y: 6.18, w: CW, h: 0.66, fill: "2A1520", line: "5C2A3A" });
   txt(s, [
     { text: "재현 실패는 실패가 아니다.  ", options: { bold: true, color: MAG } },
-    { text: "\"이 논문은 코스닥에서 성립하지 않는다\"는 것도 측정 결과다. 지우지 않고 남겨 두면, 다음 사람이 같은 논문을 다시 주워 오는 일을 막는다.", options: { color: INK } },
+    { text: "\"이 논문은 코스닥에서 성립하지 않는다\"는 것도 측정 결과다. 지우지 않고 남겨 두면, 다음 사람이 같은 논문을 다시 주워 오는 일을 막는다. 통과하지 못한 논문은 '미검증'으로 남아 표시를 달고 인용된다 — 관문은 정지 버튼이 아니다.", options: { color: INK } },
   ], { x: M + 0.26, y: 6.18, w: CW - 0.52, h: 0.66, fontSize: 11.5, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
 
@@ -319,7 +323,7 @@ function sLedger() {
     '          "universe": "KOSDAQ", "n": 1418,',
     '          "window":   "2023-01-02..2026-02-07",',
     '          "claim":    "비유동성 상위분위 초과수익 > 0",',
-    '          "observed": { "spread_bp": 41, "t": 2.31 } }',
+    '          "observed": { "spread_bp": 41, "t": 3.42 } }',
     '      ],',
     '',
     '      "limits": [',
@@ -619,15 +623,15 @@ function sEnvelope() {
     '      "verdict":  "재현됨",',
     '      "at":       "2026-02-11",',
     '      "universe": "KOSDAQ", "n": 1418,',
-    '      "observed": { "spread_bp": 41, "t": 2.31 }',
+    '      "observed": { "spread_bp": 41, "t": 3.42 }   // 임계 3.0',
     '    },',
     '    "assumes": { "participation": 0.15 }',
     '  },',
     '',
     '  "limits": ["논문 표본은 미국 상장주 — 코스닥 외삽 근거 아님"],',
     '',
-    '  "desk": "execution-trader",',
-    '  "instance": "exec-20260911-000660-a91f",   // ← v2 신설',
+    '  "desk": "q3-execution",',
+    '  "instance": "q3-execution-20260911-000660-a91f",  // ← v2 신설',
     '  "tier": "T2",  "escalated_from": null,',
     '  "reviewed_by": ["risk", "compliance"]',
     '}',
@@ -660,7 +664,7 @@ function sGates() {
     ["판정 어휘", "점수·등급·목표주가·매수/매도 어휘가 있는가", "문장 삭제 후 반려", MAG, false],
     ["출처 등급", "모든 주장에 grade 가 있는가 · '해석'이 승격되지 않았는가", "등급 없는 주장 차단", AMB, false],
     ["재현", "인용 논문의 state 가 무엇인가 (4상태)", "retired · 방향 반대 → 반려", GRN, true],
-    ["논문 실재", "state=adopted 인가 · limits 가 비어 있지 않은가", "은퇴본 인용 시 반려", CYN, false],
+    ["논문 실재", "장부에 실재하는 논문인가 · limits 가 비어 있지 않은가", "지어낸 인용 차단", CYN, false],
     ["신선도", "asof·stale_days 가 임계(3영업일)를 넘지 않는가", "값 대신 '데이터 없음'", BLU, false],
     ["유출 검사", "키·URL·포트폴리오사 실명이 남았는가 (scrub())", "전체 발행 중단", ORG, false],
     ["4-eyes", "리스크와 준법감시 양쪽이 승인했는가", "해당 절 제외", PUR, false],
@@ -692,11 +696,11 @@ function sScorecard() {
   panel(s, { x: M, y: 1.86, w: 6.3, h: 3.0, fill: PANEL, line: EDGE });
   txt(s, "주간 데스크 스코어카드", { x: M + 0.24, y: 2.0, w: 4.0, h: 0.3, fontSize: 14, bold: true, color: INK });
   const sc = [
-    ["equity-analyst", 0.94, 0.06, GRN],
-    ["quant-researcher", 0.81, 0.19, AMB],
-    ["macro-strategist", 0.90, 0.10, GRN],
-    ["execution-trader", 0.88, 0.12, GRN],
-    ["risk-officer", 0.97, 0.03, GRN],
+    ["q1-progress", 0.94, 0.06, GRN],
+    ["q2-disposal", 0.81, 0.19, AMB],
+    ["q3-execution", 0.90, 0.10, GRN],
+    ["q4-timing", 0.88, 0.12, GRN],
+    ["quant-method", 0.97, 0.03, GRN],
   ];
   mono(s, "데스크", { x: M + 0.24, y: 2.36, w: 2.2, h: 0.22, fontSize: 9, color: DIM });
   mono(s, "게이트 통과율", { x: M + 2.5, y: 2.36, w: 2.6, h: 0.22, fontSize: 9, color: DIM });
@@ -707,7 +711,7 @@ function sScorecard() {
     pxBar(s, M + 2.5, y + 0.09, 2.6, 0.14, r[1], r[3]);
     mono(s, Math.round(r[2] * 100) + "%", { x: M + 5.3, y, w: 0.8, h: 0.3, fontSize: 9.5, bold: true, color: r[3], align: "right", valign: "middle" });
   });
-  txt(s, "quant 의 반려 19% 는 대부분 limits 누락이다 — 프롬프트가 아니라 스킬 문서를 고쳐야 한다는 신호다.", {
+  txt(s, "q2-disposal 의 반려 19% 는 대부분 limits 누락이다 — 프롬프트가 아니라 스킬 문서를 고쳐야 한다는 신호다.", {
     x: M + 0.24, y: 4.50, w: 5.85, h: 0.3, fontSize: 9, italic: true, color: AMB });
 
   const metrics = [["재현 성공률", "82%", "이번 주 심사 통과분 기준", GRN],
@@ -1238,12 +1242,14 @@ function sAppendix() {
     '├─ stock-monitor/        변경 없음 (ki_monitor.py 8,684줄)',
     '├─ docs/                 변경 없음',
     '│',
-    '├─ agents/               ← 새로 생김',
-    '│   ├─ ki_ledger_mcp.py     MCP 서버 · 읽기 8종  (~200줄)',
-    '│   ├─ replication.py       재현 러너 (결정적)   (~250줄)',
-    '│   ├─ envelope.py          봉투 스키마 · 검증기',
-    '│   ├─ gates.py             게이트 ①~⑦ 검사기   (~150줄)',
-    '│   └─ triggers.py          트리거 스캐너 · 소집',
+    '├─ agents/               ← Phase 1 완료 (93개 검사)',
+    '│   ├─ envelope.py          봉투 스키마 · 검증기      16',
+    '│   ├─ papers.py            논문 장부 ki.papers/2    19',
+    '│   ├─ replication.py       재현 러너 (결정적)     16',
+    '│   ├─ gates.py             게이트 ①~⑦ 검사기     20',
+    '│   ├─ ki_ledger_mcp.py     MCP 서버 · 읽기 8종    21',
+    '│   ├─ selftest.py          다섯 개를 한 번에',
+    '│   └─ triggers.py          트리거 스캐너 (Phase 2)',
     '│',
     '└─ .claude/',
     '    ├─ agents/              데스크 9개 정의',
@@ -1274,7 +1280,7 @@ function sAppendix() {
     txt(s, n[0], { x: 8.0, y: y + 0.12, w: 4.5, h: 0.3, fontSize: 12, bold: true, color: n[2] });
     txt(s, n[1], { x: 7.74, y: y + 0.44, w: 4.76, h: 0.56, fontSize: 9.5, color: MUT });
   });
-  foot(s, "// 새로 쓰는 파이썬 약 600줄 · 나머지는 마크다운 정의 파일 · 기존 코드 변경 0줄");
+  foot(s, "// Phase 1 은 실제로 들어갔다 — agents/ 파이썬 다섯 파일 · 자체 검사 93개 · ki_monitor.py 변경 0줄");
 }
 
 

@@ -293,14 +293,24 @@ print("\n[9] 문서의 테스트 개수가 실제와 맞는가")
 py = subprocess.run([sys.executable, "ki_monitor.py", "selftest"],
                     cwd=ROOT / "stock-monitor", capture_output=True, text=True)
 n_py = int(re.search(r"(\d+) passed", py.stdout).group(1))
-print(f"     실제: selftest {n_py}")
+
+# 판단층(agents/)도 자체 검사를 갖는다. 문서가 두 층의 개수를 함께 적으므로
+# 여기서도 둘 다 실제로 돌려 본다 — 한쪽만 세면 다른 쪽 숫자가 낡아 간다.
+n_ag = 0
+if (ROOT / "agents" / "selftest.py").exists():
+    ag = subprocess.run([sys.executable, "agents/selftest.py"],
+                        cwd=ROOT, capture_output=True, text=True)
+    n_ag = sum(int(x) for x in re.findall(r"(\d+) passed", ag.stdout))
+    if ag.returncode != 0:
+        bad(f"agents/selftest.py 가 실패했습니다 (rc={ag.returncode})")
+print(f"     실제: selftest {n_py} · agents {n_ag}")
 n_js = n_py
 for p in ["README.md", "docs/RUN.md", "CLAUDE.md", "stock-monitor/README.md"]:
     txt = (ROOT / p).read_text(encoding="utf-8")
     stale = []
     for m in re.finditer(r"(\d+)개", txt):
         v = int(m.group(1))
-        if 60 <= v <= 400 and v not in (n_py, n_js):
+        if 60 <= v <= 400 and v not in (n_py, n_js, n_ag):
             ctx = txt[max(0, m.start() - 40):m.end()]
             if "test" in ctx.lower() or "selftest" in ctx or "검증" in ctx:
                 stale.append(v)

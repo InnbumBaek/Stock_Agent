@@ -10,5 +10,14 @@
         ]
       }
     ]
+  },
+  "mcpServers": {
+    "ki-ledger": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PROJECT_DIR}/agents/ki_ledger_mcp.py"
+      ],
+      "env": {}
+    }
   }
 }
