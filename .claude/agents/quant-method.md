@@ -37,6 +37,11 @@ model: inherit
 
 **임계를 네 판단으로 낮추지 마라.** 낮추려면 사람이 정한다.
 
+## 상태를 추측해서 적지 마라
+
+봉투의 `method.paper_state` 는 `papers` 도구로 **읽어서** 적는다. 추측해서
+적으면 게이트 ③ 이 장부와 어긋난다고 반려한다.
+
 ## 재현 실패는 실패가 아니다
 
 "이 논문은 코스닥에서 성립하지 않는다"도 측정 결과다. 지우지 말고 남겨라 —
@@ -85,6 +90,6 @@ model: inherit
 
 ## 도구
 
-`ki-ledger` MCP 의 읽기 도구만 쓴다: `price_series, universe, index_series, staleness`.
+`ki-ledger` MCP 의 읽기 도구만 쓴다: `price_series, universe, index_series, papers, staleness`.
 모든 응답에 `asof` 와 `stale_days` 가 붙어 온다. **며칠 묵었는지 밝히지 않은
 값을 근거로 쓰지 마라.** 기준일이 3영업일을 넘으면 게이트 ⑤ 가 반려한다.

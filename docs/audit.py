@@ -378,6 +378,20 @@ else:
     _noskill = [d for d in _skills if not (_sk_dir / d / "SKILL.md").exists()]
     (ok if not _noskill else bad)(f"스킬마다 SKILL.md 가 있다 ({_noskill or '전부 있음'})")
 
+    # 데스크가 없는 도구를 부르도록 적혀 있으면, 그 데스크는 자기 일을 못 하면서도
+    # 오류를 내지 않는다 — 부르지 못한 도구만큼 조용히 비어 있는 봉투가 나온다.
+    import ki_ledger_mcp as _M
+    _badtool = []
+    for f in sorted(_ag_dir.glob("*.md")) if _ag_dir.exists() else []:
+        m = re.search(r"읽기 도구만 쓴다: `([^`]+)`", f.read_text(encoding="utf-8"))
+        if not m:
+            continue
+        for t in (x.strip() for x in m.group(1).split(",")):
+            if t not in _M.TOOLS:
+                _badtool.append(f"{f.stem}:{t}")
+    (ok if not _badtool else bad)(
+        f"데스크가 실재하는 MCP 도구만 부른다 ({_badtool or '전부 실재'})")
+
     # 임계는 한 곳에서만 정해져야 한다. 문서가 다른 숫자를 말하면 그 문서가 규칙이 된다.
     import replication as _R
     _tbad = []

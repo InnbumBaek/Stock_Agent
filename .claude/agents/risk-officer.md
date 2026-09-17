@@ -81,6 +81,6 @@ model: inherit
 
 ## 도구
 
-`ki-ledger` MCP 의 읽기 도구만 쓴다: `facts, price_series, fundamentals, universe, index_series, macro, staleness`.
+`ki-ledger` MCP 의 읽기 도구만 쓴다: `facts, price_series, fundamentals, universe, index_series, macro, papers, staleness`.
 모든 응답에 `asof` 와 `stale_days` 가 붙어 온다. **며칠 묵었는지 밝히지 않은
 값을 근거로 쓰지 마라.** 기준일이 3영업일을 넘으면 게이트 ⑤ 가 반려한다.

@@ -162,6 +162,21 @@ def method_papers(doc: dict) -> dict:
             if isinstance(v, dict)}
 
 
+def cite(doc: dict, key: str) -> str:
+    """논문 한 줄 인용. 없으면 빈 문자열 — 지어내지 않는다.
+
+    `ki_monitor.cite()` 와 같은 일을 하되 장부를 인자로 받는다. 측정층을
+    import 하지 않고도 인용문을 만들 수 있어야 하기 때문이다."""
+    v = (doc.get("papers") or {}).get(key)
+    if not v:
+        return ""
+    where = ", ".join(x for x in (str(v.get("volume") or ""),
+                                  str(v.get("pages") or "")) if x)
+    doi = f" doi:{v['doi']}" if v.get("doi") else ""
+    return (f"{v.get('authors')} ({v.get('year')}) {v.get('title')}. "
+            f"{v.get('journal')}{' ' + where if where else ''}.{doi}")
+
+
 def method_cite(doc: dict, key: str) -> str:
     """방법론 논문 한 줄 인용. 없으면 빈 문자열 — 지어내지 않는다."""
     m = method_papers(doc).get(key)
@@ -386,6 +401,12 @@ def selftest() -> int:
         d["papers"]["amihud2002"]["state"] = ADOPTED
         _assert(any("재현 없이" in x for x in validate(d)), validate(d))
     check("재현 기록 없는 adopted 는 검증에서 걸린다", _validate_catches_fake_adopted)
+
+    def _cite_does_not_invent():
+        d = migrate(_v1(), at="2026-09-17")
+        _assert("2002" in cite(d, "amihud2002"))
+        _assert(cite(d, "없는논문") == "")      # 지어내지 않는다
+    check("인용문을 지어내지 않는다", _cite_does_not_invent)
 
     def _method_papers_real():
         """코드가 인용하는 방법론 논문이 장부에 실재하는가 (규칙 4).

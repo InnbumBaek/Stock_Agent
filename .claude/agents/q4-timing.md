@@ -33,6 +33,9 @@ model: inherit
 - **국면 서술을 예측으로 바꾸는 것.** "금리가 내렸다"는 측정이고 "그래서 오를
   것"은 판정이다. 게이트 ① 이 잡는다.
 - **CAR 를 기준선 없이 내는 것.** 초과수익은 무엇 대비인가를 함께 적어야 한다.
+- **일정의 등급을 섞는 것.** `calendar` 는 항목마다 등급이 다르다 — 기관이
+  공표한 확정 일정(`공표`)과 제도에서 계산한 것(`규칙`), 상장일에서 관행으로
+  추정한 것(`추정`)을 같은 줄에 늘어놓으면 회의에서 전부 확정 일정처럼 읽힌다.
 - **락업 물량 압력을 사실처럼 말하는 것.** 트리거가 주는 해제일은 상장일에서
   계산한 **추정**이다. 실제 해제 물량은 공시로 확인해야 한다.
 
@@ -76,6 +79,6 @@ model: inherit
 
 ## 도구
 
-`ki-ledger` MCP 의 읽기 도구만 쓴다: `index_series, macro, price_series, disclosures, staleness`.
+`ki-ledger` MCP 의 읽기 도구만 쓴다: `index_series, macro, calendar, price_series, disclosures, papers, staleness`.
 모든 응답에 `asof` 와 `stale_days` 가 붙어 온다. **며칠 묵었는지 밝히지 않은
 값을 근거로 쓰지 마라.** 기준일이 3영업일을 넘으면 게이트 ⑤ 가 반려한다.

@@ -16,12 +16,12 @@ papers.py         논문 장부 ki.papers/2 — 네 상태 · append-only       
 replication.py    재현 러너. 결정적이다 — LLM 을 쓰지 않는다            20
 gates.py          게이트 ①~⑦. 통과 아니면 반려다                      20
 triggers.py       트리거 스캐너 — 원장의 변화가 데스크를 부른다         16
-ki_ledger_mcp.py  원장을 읽는 MCP 서버. 쓰기 도구가 없다               22
+ki_ledger_mcp.py  원장을 읽는 MCP 서버 · 읽기 10종. 쓰기 도구가 없다    27
 cycle.py          주간 논문 사이클 — 감가 · 재검 · 기록                13
 run_day.py        하루 운영 — 소집(작업지시서) · 게이트 → 발행         14
 scorecard.py      계측. 고치지는 않는다                               11
 replay.py         되짚기 — 봉투가 읽은 것과 지금 원장을 대조          12
-                                                            합계  166
+                                                            합계  172
 ```
 
 정의 파일은 저장소 루트의 `.claude/` 에 있다.
@@ -34,7 +34,7 @@ replay.py         되짚기 — 봉투가 읽은 것과 지금 원장을 대조 
 ## 검증
 
 ```bash
-python agents/selftest.py          # 166개. 키·네트워크·원장 없이 돈다
+python agents/selftest.py          # 172개. 키·네트워크·원장 없이 돈다
 python agents/gates.py --selftest  # 모듈 하나만 돌릴 수도 있다
 python docs/audit.py               # 정의 파일이 코드와 어긋나지 않는지
 ```
@@ -81,6 +81,15 @@ python docs/audit.py               # 정의 파일이 코드와 어긋나지 않
 프롬프트로 건 금지는 프롬프트가 길어지면 희미해지고 모형이 바뀌면 같이 바뀐다.
 
 세 겹이다 — ① 쓰기 도구가 없다 ② 연결이 `mode=ro` 다 ③ 생 SQL 을 받지 않는다.
+
+열 개 전부 읽기다. 여덟은 원장(`ki.sqlite`)을, `papers` 는 논문 장부를,
+`calendar` 는 일정표를 읽는다. 뒤의 둘은 원장이 없어도 답한다 — 다른 파일이기
+때문이다.
+
+**데스크가 `papers` 를 읽을 수 있어야 한다.** 읽지 못하면 봉투의
+`method.paper_state` 를 추측해서 적게 되고, 게이트 ③ 이 장부와 어긋난다고
+반려한다. 데스크가 볼 수 없는 것을 근거로 반려하는 관문은 관문이 아니라
+함정이다.
 
 ### 4. '해석' 은 어떤 등급으로도 승격되지 않는다
 

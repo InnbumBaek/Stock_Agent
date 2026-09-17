@@ -67,6 +67,10 @@ def _scrub(text) -> str:
     return out
 
 
+def io_open(p):
+    return open(p, encoding="utf-8")
+
+
 def _code(v) -> str:
     if not (isinstance(v, str) and _CODE.match(v)):
         raise Denied(f"종목코드는 숫자 6자리여야 합니다 (받은 값: {v!r})")
@@ -107,7 +111,8 @@ def _bdays_between(a: str, b: str) -> int:
     return n
 
 
-def _envelope(rows, asof, *, source, note=None, reason=None, **extra) -> dict:
+def _envelope(rows, asof, *, source, note=None, reason=None,
+              grade: str = GRADE, **extra) -> dict:
     """원장에서 나가는 모든 응답이 입는 봉투.
 
     기준일 없이 값만 돌려주지 않는다. 받는 쪽이 며칠 묵었는지 모르면, 묵은
@@ -115,7 +120,7 @@ def _envelope(rows, asof, *, source, note=None, reason=None, **extra) -> dict:
     today = date.today().isoformat()
     out = {
         "ok": rows is not None,
-        "source_grade": GRADE,
+        "source_grade": grade,
         "sources": [source],
         "asof": asof,
         "stale_days": _bdays_between(asof, today) if asof else None,
@@ -253,6 +258,104 @@ def t_staleness(con, market: str = "KOSDAQ") -> dict:
                      note="catchup 으로 밀린 영업일을 채울 수 있습니다")
 
 
+def t_papers(con, key: str = None, state: str = None) -> dict:
+    """논문 장부 — 무엇을 인용해도 되는가.
+
+    이것이 없으면 데스크가 봉투의 `method.paper_state` 를 채울 방법이 없다.
+    추측해서 적으면 게이트 ③ 이 장부와 어긋난다고 반려한다 — **데스크가 볼 수
+    없는 것을 근거로 반려하는 관문은 관문이 아니라 함정이다.**
+
+    장부는 원장(`ki.sqlite`)이 아니라 `.papers.json` 이므로 `con` 을 쓰지
+    않는다. 여기서도 읽기만 한다. 등급은 `1차` 가 아니라 `방법론` 이다 —
+    논문은 계산 규칙의 출처이지 시세 출처가 아니다."""
+    if key is not None and not (isinstance(key, str) and key.strip()):
+        raise Denied("key 는 비어 있지 않은 문자열이어야 합니다")
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import papers as P                                    # noqa: PLC0415
+    if not P.LEDGER.exists():
+        return _envelope(None, None, source="논문 장부(.papers.json)",
+                         grade="방법론", reason="논문 장부가 없습니다")
+    doc = P.age_states(P.migrate(P.load()))
+    if state is not None and state not in P.STATES:
+        raise Denied(f"state 는 {P.STATES} 중 하나여야 합니다 (받은 값: {state!r})")
+    rows = []
+    for k, v in (doc.get("papers") or {}).items():
+        if (key and k != key) or (state and v.get("state") != state):
+            continue
+        ok, mark = P.citable(doc, k)
+        rows.append({
+            "paper": k, "state": v.get("state"), "question": v.get("question"),
+            "citable": ok, "mark": mark,
+            "state_reason": v.get("state_reason"),
+            "recheck_due": v.get("recheck_due"),
+            "citation": P.cite(doc, k),
+            "limits": list(v.get("limits") or []),
+            # 재현 기록은 쌓인다. 가장 최근 것만 낸다 — 전부 실으면 응답이
+            # 커지고, 그때 기준이 필요하면 장부를 직접 봐야 한다.
+            "last_replication": (v.get("replication") or [None])[-1],
+        })
+    rows.sort(key=lambda r: r["paper"])
+    if key and not rows:
+        return _envelope(None, doc.get("migrated_at"),
+                         source="논문 장부(.papers.json)", grade="방법론",
+                         reason=f"장부에 없는 논문입니다: {key}. 지어내지 마십시오.")
+    return _envelope(rows, doc.get("migrated_at"),
+                     source="논문 장부(.papers.json)", grade="방법론",
+                     schema_version=doc.get("schema"),
+                     note="인용이 막히는 것은 retired 뿐입니다. 나머지는 "
+                          "mark 를 값에 붙여 내보내십시오.")
+
+
+CALENDAR = MONITOR / ".calendar.json"
+
+
+def t_calendar(con, since: str = None, until: str = None,
+               limit: int = None) -> dict:
+    """다가오는 일정 — 금통위·지수 정기변경·보호예수 해제 같은 것.
+
+    **일정마다 등급이 다르다.** 기관이 공표한 확정 일정과, 제도에서 계산한 것과,
+    상장일에서 관행으로 추정한 것을 같은 줄에 늘어놓으면 회의에서 전부 확정
+    일정처럼 읽힌다. 등급을 항목마다 붙여서 낸다 (공표 · 규칙 · 추정).
+
+    원장이 아니라 `.calendar.json` 을 읽는다. 여기서도 읽기만 한다."""
+    since, until = _day(since, "since"), _day(until, "until")
+    limit = _limit(limit, 100)
+    if not CALENDAR.exists():
+        return _envelope(None, None, source="일정표(.calendar.json)",
+                         grade="참고",
+                         reason="일정표가 없습니다. docs/fetch_calendar.py 로 "
+                                "갱신하십시오.")
+    try:
+        with io_open(CALENDAR) as f:
+            doc = json.load(f) or {}
+    except (OSError, ValueError) as e:
+        return _envelope(None, None, source="일정표(.calendar.json)",
+                         grade="참고", reason=f"일정표를 읽지 못했습니다: {_scrub(e)}")
+    today = date.today().isoformat()
+    lo = since or today
+    rows = []
+    for name, src in (doc.get("sources") or {}).items():
+        if not isinstance(src, dict):
+            continue
+        for ev in src.get("events") or []:
+            if not (isinstance(ev, (list, tuple)) and len(ev) >= 2):
+                continue
+            when, what = str(ev[0]), str(ev[1])
+            if when < lo or (until and when > until):
+                continue
+            rows.append({
+                "date": when, "event": what, "source": name,
+                "org": src.get("기관"), "grade": src.get("등급"),
+                "checked": src.get("확인"),
+            })
+    rows.sort(key=lambda r: (r["date"], r["source"]))
+    rows = rows[:limit]
+    return _envelope(rows, doc.get("verified"), source="일정표(.calendar.json)",
+                     grade="참고", grades=doc.get("grades"),
+                     note="일정마다 등급이 다릅니다 — 공표·규칙·추정을 섞지 "
+                          "마십시오. '추정' 은 증권신고서로 확인해야 하는 값입니다.")
+
+
 TOOLS = {
     "universe": (t_universe, "한 시장의 상장종목 목록",
                  {"market": ("string", "KOSPI · KOSDAQ · KONEX"),
@@ -280,6 +383,13 @@ TOOLS = {
                "limit": ("integer", "최대 행 수")}, []),
     "staleness": (t_staleness, "원장이 며칠 뒤처졌는가",
                   {"market": ("string", "KOSPI · KOSDAQ · KONEX")}, []),
+    "papers": (t_papers, "논문 장부 — 무엇을 인용해도 되는가 · 어떤 표시가 붙는가",
+               {"key": ("string", "논문 키 (없으면 전부)"),
+                "state": ("string", "unverified · adopted · warned · retired")}, []),
+    "calendar": (t_calendar, "다가오는 일정 — 항목마다 등급(공표·규칙·추정)이 붙는다",
+                 {"since": ("string", "YYYY-MM-DD (기본 오늘)"),
+                  "until": ("string", "YYYY-MM-DD"),
+                  "limit": ("integer", "최대 행 수 (기본 100)")}, []),
 }
 
 
@@ -314,7 +424,8 @@ def open_ledger(path: Path = None) -> sqlite3.Connection:
 
 
 def call_tool(con, name: str, args: dict) -> dict:
-    if con is None:
+    # 논문 장부는 원장과 다른 파일이다. 원장이 없어도 읽을 수 있어야 한다.
+    if con is None and name not in ("papers", "calendar"):
         raise Denied("원장이 아직 없습니다. stock-monitor 에서 "
                      "ingest --universe <시장> 을 먼저 실행하십시오. "
                      "원장이 생기면 이 서버를 다시 시작할 필요 없이 바로 읽습니다.")
@@ -473,7 +584,7 @@ def selftest() -> int:
             for w in ("insert", "update", "delete", "write", "exec", "sql",
                       "query", "ingest", "upsert", "drop"):
                 _assert(not any(w in n for n in names), w)
-            _assert(len(names) == 8, names)
+            _assert(len(names) == 10, names)
             for t in tool_list():
                 _assert("읽기 전용" in t["description"])
         check("쓰기 도구가 존재하지 않는다 (8종 전부 읽기)", _no_write_tools)
@@ -548,13 +659,16 @@ def selftest() -> int:
                      "price_series": {"code": "000660"},
                      "fundamentals": {"code": "000660"},
                      "disclosures": {"code": "000660"},
-                     "index_series": {}, "macro": {}, "staleness": {}}
+                     "index_series": {}, "macro": {}, "staleness": {},
+                     "papers": {}, "calendar": {}}
             _assert(set(calls) == set(TOOLS))
             for n, a in calls.items():
                 r = call_tool(con, n, a)
                 for k in ("ok", "source_grade", "asof", "stale_days", "rows", "n"):
                     _assert(k in r, f"{n}.{k}")
-                _assert(r["source_grade"] == "1차", n)
+                # 논문 장부는 방법론이다 — 계산 규칙의 출처이지 시세가 아니다.
+                _assert(r["source_grade"] in ("1차", "방법론", "참고"),
+                        (n, r["source_grade"]))
         check("여덟 도구가 모두 봉투를 입고 나온다", _all_tools_envelope)
 
         def _unknown_arg():
@@ -580,8 +694,8 @@ def selftest() -> int:
 
         def _tools_list():
             r = handle({"jsonrpc": "2.0", "id": 2, "method": "tools/list"}, con)
-            _assert(len(r["result"]["tools"]) == 8)
-        check("tools/list 가 여덟 개를 낸다", _tools_list)
+            _assert(len(r["result"]["tools"]) == 10)
+        check("tools/list 가 열 개를 낸다", _tools_list)
 
         def _tools_call():
             r = handle({"jsonrpc": "2.0", "id": 3, "method": "tools/call",
@@ -623,7 +737,7 @@ def selftest() -> int:
             lines = [json.loads(x) for x in out.getvalue().splitlines() if x.strip()]
             _assert(len(lines) == 3, lines)              # 알림에는 응답이 없다
             _assert(lines[1]["error"]["code"] == -32700)
-            _assert(len(lines[2]["result"]["tools"]) == 8)
+            _assert(len(lines[2]["result"]["tools"]) == 10)
         check("stdio 왕복이 성립한다 (깨진 줄에도 서버가 죽지 않는다)", _serve_roundtrip)
 
         con.close()
@@ -631,13 +745,87 @@ def selftest() -> int:
         def _no_ledger_still_serves():
             """원장이 없어도 서버는 서고, 사유를 말한다."""
             r = handle({"jsonrpc": "2.0", "id": 9, "method": "tools/list"}, None)
-            _assert(len(r["result"]["tools"]) == 8)      # 목록은 나온다
+            _assert(len(r["result"]["tools"]) == 10)     # 목록은 나온다
             r2 = handle({"jsonrpc": "2.0", "id": 10, "method": "tools/call",
                          "params": {"name": "facts",
                                     "arguments": {"code": "000660"}}}, None)
             _assert(r2["result"]["isError"])
             _assert("ingest" in r2["result"]["content"][0]["text"])
         check("원장이 없어도 서버는 서고 사유를 말한다", _no_ledger_still_serves)
+
+        def _papers_tool():
+            """데스크가 논문 상태를 읽을 수 있어야 한다.
+
+            읽을 수 없으면 봉투의 paper_state 를 추측해서 적게 되고, 게이트 ③ 이
+            장부와 어긋난다고 반려한다. 데스크가 볼 수 없는 것을 근거로 반려하는
+            관문은 관문이 아니라 함정이다."""
+            import papers as _P
+            if not _P.LEDGER.exists():
+                return
+            r = call_tool(con, "papers", {})
+            _assert(r["ok"] and r["n"] >= 1, r)
+            _assert(r["source_grade"] == "방법론")
+            row = r["rows"][0]
+            for k in ("paper", "state", "citable", "mark", "citation"):
+                _assert(k in row, k)
+            _assert(row["state"] in _P.STATES)
+            _assert(call_tool(con, "papers", {"key": row["paper"]})["n"] == 1)
+            ghost = call_tool(con, "papers", {"key": "없는논문2099"})
+            _assert(not ghost["ok"] and "지어내지" in ghost["reason"])
+        check("데스크가 논문 상태를 읽을 수 있다", _papers_tool)
+
+        def _papers_filter_state():
+            import papers as _P
+            if not _P.LEDGER.exists():
+                return
+            r = call_tool(con, "papers", {"state": "unverified"})
+            _assert(all(x["state"] == "unverified" for x in r["rows"]))
+            try:
+                call_tool(con, "papers", {"state": "없는상태"})
+            except Denied:
+                return
+            raise AssertionError("없는 상태가 통과했습니다")
+        check("논문 상태로 거를 수 있고 없는 상태는 거절한다", _papers_filter_state)
+
+        def _papers_without_ledger():
+            """원장이 없어도 논문 장부는 읽힌다 — 다른 파일이기 때문이다."""
+            import papers as _P
+            if not _P.LEDGER.exists():
+                return
+            r = handle({"jsonrpc": "2.0", "id": 11, "method": "tools/call",
+                        "params": {"name": "papers", "arguments": {}}}, None)
+            _assert(not r["result"].get("isError"), r["result"])
+        check("원장이 없어도 논문 장부는 읽힌다", _papers_without_ledger)
+
+        def _calendar_grades():
+            """일정마다 등급이 붙어 나오는가.
+
+            공표된 확정 일정과 상장일에서 추정한 것을 같은 줄에 늘어놓으면
+            회의에서 전부 확정 일정처럼 읽힌다."""
+            if not CALENDAR.exists():
+                return
+            r = call_tool(con, "calendar", {"since": "2020-01-01", "limit": 5})
+            _assert(r["ok"], r)
+            _assert(r["source_grade"] == "참고")
+            for row in r["rows"]:
+                _assert(row.get("grade"), row)
+                _assert(row.get("date") and row.get("event"), row)
+            _assert(r.get("grades"))
+            _assert("섞지" in r["note"])
+        check("일정은 항목마다 등급을 달고 나온다", _calendar_grades)
+
+        def _calendar_window():
+            if not CALENDAR.exists():
+                return
+            r = call_tool(con, "calendar",
+                          {"since": "2026-01-01", "until": "2026-06-30"})
+            _assert(all("2026-01-01" <= x["date"] <= "2026-06-30" for x in r["rows"]))
+            try:
+                call_tool(con, "calendar", {"since": "2026/01/01"})
+            except Denied:
+                return
+            raise AssertionError("이상한 날짜가 통과했습니다")
+        check("일정 구간을 거르고 이상한 날짜를 거절한다", _calendar_window)
 
         def _missing_ledger():
             try:

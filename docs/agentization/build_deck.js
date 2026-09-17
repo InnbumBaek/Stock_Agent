@@ -512,7 +512,7 @@ function sLoad() {
     { text: "핵심은 절감이 아니라 피크다. ", options: { bold: true, color: AMB } },
     { text: "전수 방식은 조용한 날에도 255를 쓰느라, 정작 공시가 몰린 날(D18)에 더 깊이 볼 여력이 없다. 이벤트 방식은 그날 예산을 그날 일에 쓴다.", options: { color: INK } },
   ], { x: M + 0.26, y: 6.3, w: CW - 0.52, h: 0.58, fontSize: 11, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
-  foot(s, "// 발생률은 가정값이다. 실측은 Phase 1 에서 원장의 공시·변동 이력으로 역산한다.");
+  foot(s, "// 발생률은 여전히 가정값이다. 역산기는 들어갔고(run_day.py --stage convene) 실측에는 원장이 필요하다 — 이 수치는 아직 실측이 아니다.");
 }
 
 function sEscalation() {
@@ -576,8 +576,8 @@ function sWall() {
 
   panel(s, { x: 6.34, y: 1.9, w: 6.39, h: 3.5, fill: PANEL, line: AMB });
   mono(s, "INTERPRETATION  ·  판단층 (동적)", { x: 6.58, y: 2.06, w: 5.9, h: 0.26, fontSize: 10.5, bold: true, color: AMB });
-  const tools = [["ledger.facts", GRN], ["ledger.candles", GRN], ["ledger.factors", GRN], ["ledger.calendar", GRN],
-                 ["ledger.macro", GRN], ["ledger.disclosure", GRN], ["ledger.quality", GRN], ["ledger.papers", CYN]];
+  const tools = [["facts", GRN], ["price_series", GRN], ["price_series", GRN], ["calendar", GRN],
+                 ["macro", GRN], ["disclosures", GRN], ["staleness", GRN], ["papers", CYN]];
   tools.forEach((t, i) => {
     const x = 6.58 + (i % 2) * 3.0, y = 2.44 + Math.floor(i / 2) * 0.42;
     s.addShape(pres.ShapeType.rect, { x, y, w: 2.82, h: 0.34, fill: { color: PANEL2 }, line: { type: "none" } });
@@ -586,7 +586,7 @@ function sWall() {
   });
   mono(s, "ingest · catchup · fundamentals · KIS 주문  →  도구가 존재하지 않는다", {
     x: 6.58, y: 4.32, w: 5.9, h: 0.26, fontSize: 9.5, bold: true, color: MAG });
-  txt(s, "새 도구 ledger.papers 가 추가된다 — 논문 원장을 읽기만 한다. 채택·은퇴를 쓰는 것은 재현 파이프라인(배치)이지 에이전트가 아니다.", {
+  txt(s, "새 도구 papers 가 추가된다 — 논문 원장을 읽기만 한다. 채택·은퇴를 쓰는 것은 재현 파이프라인(배치)이지 에이전트가 아니다.", {
     x: 6.58, y: 4.64, w: 5.9, h: 0.6, fontSize: 10, color: MUT });
 
   const w3 = [["벽은 구조다", "\"쓰지 마라\"라고 적는 대신, 쓸 수 있는 도구를 만들지 않는다."],
@@ -782,32 +782,33 @@ function sDay() {
 
 function sRoadmap() {
   const s = slide();
-  header(s, "PART 5 · ROADMAP", "10주 — 재현 관문을 먼저 세우고 그 위에 소집을 얹는다",
-         "논문 파이프라인이 먼저다. 재현되지 않은 방법론 위에 에이전트를 아무리 많이 띄워도 의미가 없다.");
+  header(s, "PART 5 · ROADMAP", "다섯 단계 중 넷이 코드로 들어갔다",
+         "논문 파이프라인이 먼저였다. 재현되지 않은 방법론 위에 에이전트를 아무리 많이 띄워도 의미가 없기 때문이다.");
 
   const ph = [
-    ["P1", "W1–2", "논문 원장", ["ki.papers/2 스키마 전환", "state · replication · 반감기 필드", "기존 12편 이관 (미검증 상태로)", "ledger.papers MCP 도구"], CYN],
-    ["P2", "W3–4", "재현 관문", ["팩터 재현 러너 (결정적 코드)", "주간 사이클 1회 시범 가동", "판정 → 원장 append", "게이트 ③ 코드화"], GRN],
-    ["P3", "W5–6", "사이클 상시화", ["월 07:30 주간 배치 등록", "신규 후보 + 재검 도래분 합류", "감가 · 경고 · 은퇴 자동화", "주 2편 채택률 실측"], AMB],
-    ["P4", "W7–8", "동적 소집", ["트리거 스캐너", "인스턴스 생성·예산·소멸", "T1~T3 에스컬레이션", "봉투 v2 · instance ID"], PUR],
-    ["P5", "W9–10", "병행 운영", ["사람 산출과 2주 대조", "스코어카드 · 리플레이", "불일치 원인 전수 분석", "전환 여부는 사람이 결정"], MAG],
+    ["P1", "들어감", "논문 원장", ["ki.papers/2 스키마 전환", "state · replication · 반감기", "기존 12편 이관 (미검증으로)", "papers MCP 도구"], CYN, 1],
+    ["P2", "들어감", "재현 관문", ["재현 러너 (결정적 코드)", "임계 |t| ≥ 3.0 확정", "판정 → 장부 append", "게이트 ③ 코드화"], GRN, 1],
+    ["P3", "들어감", "사이클 상시화", ["월 07:40 주간 배치 등록", "재검 도래분 합류 · 주 3편", "감가 · 경고 · 은퇴 자동화", "채택률 실측은 원장 필요"], AMB, 0.85],
+    ["P4", "들어감", "동적 소집", ["트리거 스캐너", "작업지시서 · 예산 · 소멸", "T1~T3 에스컬레이션", "봉투 v2 · instance · read"], PUR, 1],
+    ["P5", "일부", "병행 운영", ["스코어카드 · 리플레이", "사람 산출과 2주 대조", "불일치 원인 전수 분석", "전환 여부는 사람이 결정"], MAG, 0.4],
   ];
   const pw = 2.36, pg = 0.12;
   ph.forEach((p, i) => {
     const x = M + i * (pw + pg);
     panel(s, { x, y: 1.88, w: pw, h: 0.46, fill: p[4], line: null });
     mono(s, p[0] + "  ·  " + p[1], { x, y: 1.88, w: pw, h: 0.46, fontSize: 10.5, bold: true, color: "0D1018", align: "center", valign: "middle" });
-    panel(s, { x, y: 2.44, w: pw, h: 3.3, fill: PANEL, line: EDGE });
+    panel(s, { x, y: 2.44, w: pw, h: 3.3, fill: PANEL, line: p[5] >= 1 ? p[4] : EDGE });
     txt(s, p[2], { x: x + 0.16, y: 2.6, w: pw - 0.32, h: 0.6, fontSize: 15, bold: true, color: p[4] });
+    pxBar(s, x + 0.16, 3.06, pw - 0.32, 0.1, p[5], p[4]);
     p[3].forEach((t, j) => {
       s.addShape(pres.ShapeType.rect, { x: x + 0.18, y: 3.32 + j * 0.62, w: 0.08, h: 0.08, fill: { color: p[4] }, line: { type: "none" } });
       txt(s, t, { x: x + 0.36, y: 3.24 + j * 0.62, w: pw - 0.54, h: 0.56, fontSize: 9.5, color: INK });
     });
   });
 
-  const outs = [["P2 종료", "사이클이 한 바퀴 돌아 첫 판정이 원장에 쌓인다", GRN],
-                ["P3 종료", "손을 대지 않아도 채택본이 갱신된다", AMB],
-                ["P5 종료", "병행 2주 결과로 전환 여부를 사람이 결정한다", MAG]];
+  const outs = [["코드로 끝난 것", "스키마 · 러너 · 관문 · 트리거 · 사이클 · 되짚기 — 자체 검사 172개", GRN],
+                ["원장이 있어야 되는 것", "12편 중 5편의 실제 재현 · 채택률 · 트리거 발생률 실측", AMB],
+                ["사람이 정할 것", "병행 2주 결과로 전환 여부 — 이 덱이 아니라 회의에서", MAG]];
   outs.forEach((o, i) => {
     const x = M + i * 4.11;
     panel(s, { x, y: 5.94, w: 3.94, h: 0.76, fill: PANEL3, line: EDGE });
@@ -822,15 +823,15 @@ function sNext() {
     x: 0, y: i * 0.18, w: W, h: 0.03, fill: { color: "121826" }, line: { type: "none" },
   });
   mono(s, "▚ PART 5 · NEXT STEP", { x: M, y: 0.46, w: CW, h: 0.26, fontSize: 11, bold: true, color: AMB, charSpacing: 1.5 });
-  txt(s, "이번 주에 할 것과, 무엇으로 성공을 판정할 것인가", {
+  txt(s, "코드로 끝난 것과, 원장이 있어야 되는 것", {
     x: M, y: 0.76, w: CW, h: 0.56, fontSize: 28, bold: true, color: INK });
 
   const todo = [
-    ["재현 가능한 주장으로 환원하는 규칙", "논문에서 방향 있는 한 문장을 뽑는 기준을 정한다. 환원 안 되는 논문은 재현 대상에서 뺀다.", "W1", GRN],
-    ["ki.papers/2 스키마 확정", "state · replication · half_life · limits. 코드보다 먼저 한 장으로 합의한다.", "W1", CYN],
-    ["재현 러너 골격", "팩터 하나(amihud2002)만 먼저. 원장 일봉으로 분위 스프레드 부호를 본다.", "W2", AMB],
-    ["주간 사이클 1회 수동 실행", "이번 주 후보로 수확 → 심사 → 재현을 손으로 한 바퀴 돌려 본다. 자동화는 그다음이다.", "W2", PUR],
-    ["트리거 발생률 역산", "원장의 공시·변동 이력으로 실제 소집 건수를 계산한다. 가정값을 실측으로 바꾼다.", "W2", MAG],
+    ["재현을 진짜 원장에 물린다", "python agents/cycle.py --run  ·  12편 중 5편이 검정 대상이다. 합성 자료로는 러너가 맞다는 것까지만 확인했다.", "원장 필요", GRN],
+    ["트리거 발생률을 역산한다", "python agents/run_day.py --stage convene  ·  원장의 공시·변동 이력으로 실제 소집 건수를 잰다. 부하 수치를 가정값에서 실측으로 바꾼다.", "원장 필요", AMB],
+    ["method_papers 두 편을 Crossref 로 재대조", "hlz2016 · nw1987. 서지는 세 곳에서 일치를 봤지만 빌드 환경은 Crossref 이그레스가 막혀 규율대로의 재대조를 못 했다.", "망 필요", CYN],
+    ["needs_runner 세 편을 어떻게 할지 정한다", "ritter1991 · fh2001 은 이벤트 시간, ahxz2006 은 일간 잔차. 러너를 더 만들지, 그 셋을 미검증으로 둘지는 판단이다.", "판단", PUR],
+    ["병행 2주 — 사람 산출과 대조", "스코어카드와 리플레이가 준비돼 있다. 전환 여부는 그 결과를 놓고 회의에서 사람이 정한다.", "회의", MAG],
   ];
   todo.forEach((t, i) => {
     const y = 1.62 + i * 0.94;
@@ -843,10 +844,10 @@ function sNext() {
   });
 
   mono(s, "성공 판정 지표", { x: 8.6, y: 1.62, w: 4.1, h: 0.28, fontSize: 12, bold: true, color: AMB, charSpacing: 1 });
-  const kpi = [["주 1회", "논문 사이클이 도는가", "손대지 않아도 매주 돌아야 한다", GRN],
-               ["≥2편/주", "신규 채택 유입", "사이클 산출물", CYN],
-               ["0건", "미재현 논문 인용", "게이트 ③ 반려 건수", AMB],
-               ["-80%", "에이전트 부하", "같은 커버리지 기준", MAG]];
+  const kpi = [["172개", "자체 검사", "키·네트워크·원장 없이 돈다", GRN],
+               ["0줄", "ki_monitor.py 변경", "측정층은 손대지 않았다", CYN],
+               ["5 / 12", "검정 대상 논문", "대상 아님 4 · 러너 미비 3", AMB],
+               ["0건", "미분류 논문", "전부 셋 중 하나로 분류됐다", MAG]];
   kpi.forEach((k, i) => {
     const y = 2.02 + i * 1.16;
     mono(s, k[0], { x: 8.6, y, w: 4.1, h: 0.44, fontSize: 25, bold: true, color: k[3] });
@@ -855,7 +856,7 @@ function sNext() {
   });
 
   panel(s, { x: M, y: 6.32, w: 7.7, h: 0.5, fill: "16281C", line: "2A5A3A" });
-  txt(s, "먼저 만들 것은 판정 결과가 아니라 \"매주 도는 사이클\" 이다. 12편은 반감기 순번이 오면 거기에 실린다.", {
+  txt(s, "①②③ 이 여기서 안 되는 것은 미완이어서가 아니라 환경 때문이다 — 원장은 87MB 라 저장소에 없고, 빌드 환경은 외부 이그레스가 전면 차단돼 있다. 코드는 세 경우 모두 준비돼 있다.", {
     x: M + 0.24, y: 6.32, w: 7.3, h: 0.5, fontSize: 11, bold: true, color: GRN, valign: "middle" });
   mono(s, "내부 검토용 · 대외비 · 투자권유 자료 아님 · 계획안", {
     x: M, y: 7.00, w: 8.0, h: 0.28, fontSize: 9, color: DIM });
@@ -885,7 +886,7 @@ function sExec() {
 
   const st = [["주 1회", "논문 사이클", "신규 + 재검 도래분"], ["N", "살아있는 논문", "고정값이 아니다"],
               ["7", "발행 게이트", "재현 관문 신설"], ["0", "원장 쓰기 권한", "에이전트는 못 쓴다"],
-              ["-84%", "에이전트 부하", "같은 커버리지"], ["10주", "전환 기간", "마지막 2주는 병행"]];
+              ["0줄", "ki_monitor.py 변경", "측정층은 그대로"], ["172개", "자체 검사", "키·망·원장 없이"]];
   st.forEach((t, i) => {
     const x = 8.72 + (i % 2) * 2.02, y = 1.82 + Math.floor(i / 2) * 1.42;
     panel(s, { x, y, w: 1.88, h: 1.3, fill: PANEL, line: EDGE });
@@ -1092,7 +1093,7 @@ function sRbac() {
 
   const boxes = [
     ["외부 API 는 ingest-ops 뿐", "데스크는 네트워크를 쓰지 않는다. 실시간 호출을 허용하면 데스크마다 다른 시각의 값을 보게 되고 기준일이 깨진다.", MAG],
-    ["원장 쓰기는 한 칸뿐", "data-ops 만 ●. 나머지 여덟은 MCP 읽기 도구만 받는다. 데스크가 몇이든 이 칸은 하나다.", GRN],
+    ["원장 쓰기는 한 칸뿐", "data-ops 만 ●. 나머지 여덟 데스크는 MCP 읽기 도구만 받는다. 데스크가 몇이든 이 칸은 하나다.", GRN],
     ["△ 는 DART 원문 조회뿐", "수치는 전부 원장에서 읽는다. 밖으로 나가는 것은 접수번호로 지정된 공시 문서 한 건을 열 때뿐이다 — 검색이 아니다.", AMB],
   ];
   boxes.forEach((b, i) => {
@@ -1132,8 +1133,8 @@ function sStack() {
 
   panel(s, { x: M, y: 6.62, w: CW, h: 0.5, fill: PANEL3, line: EDGE });
   txt(s, [
-    { text: "새로 쓰는 파이썬은 MCP 서버(~200줄) · 재현 러너(~250줄) · 게이트 검사기(~150줄) 셋뿐이다. ", options: { bold: true, color: GRN } },
-    { text: "나머지는 마크다운 정의 파일이고, 기존 코드 변경은 0줄이다.", options: { color: INK } },
+    { text: "실제로 들어간 것 — agents/ 파이썬 10개 · 데스크 정의 9 · 스킬 5 · 자체 검사 172개. ", options: { bold: true, color: GRN } },
+    { text: "기존 코드 변경은 0줄이다. ki_monitor.py 는 열지 않았다.", options: { color: INK } },
   ], { x: M + 0.26, y: 6.62, w: CW - 0.52, h: 0.5, fontSize: 10.5, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
 
@@ -1141,19 +1142,20 @@ function sStack() {
 function sMcp() {
   const s = slide();
   header(s, "PART 5 · MCP DESIGN", "ki-ledger — 벽이 실제로 세워지는 곳",
-         "노출하는 도구가 곧 권한이다. 아래 여덟 개 외에는 존재하지 않으므로, 에이전트는 원장을 고칠 방법 자체가 없다.");
+         "노출하는 도구가 곧 권한이다. 아래 열 개 외에는 존재하지 않으므로, 에이전트는 원장을 고칠 방법 자체가 없다.");
 
   const rows = [
-    ["ledger.facts", "facts --codes", "종목별 관측 사실 전량 (계산 없음)"],
-    ["ledger.candles", "candles --code --days", "수정주가 일봉 · 빈 봉은 버린다"],
-    ["ledger.factors", "factors --codes --win", "팩터 값 + 논문 키 + limits"],
-    ["ledger.calendar", "calendar --days", "일정 + 등급 (공표 · 규칙 · 추정)"],
-    ["ledger.macro", "macro --limit", "ECOS 100대 통계 · 통계명 · 단위 · 시점 보존"],
-    ["ledger.disclosure", "facts --with-disclosures", "DART 공시 목록 + 접수번호 원문 링크"],
-    ["ledger.quality", "(신규) 얇은 래퍼", "stale_days · 결측 항목 · 필드매핑 검증 상태"],
-    ["ledger.papers", "(신규) 논문 원장", "state · replication · limits (읽기만)"],
+    ["universe", "market · limit", "한 시장의 상장종목 목록"],
+    ["facts", "code", "가장 최근 측정값 한 줄 (종가 기준)"],
+    ["price_series", "code · start · end", "일봉 시계열 (오름차순)"],
+    ["fundamentals", "code · period", "DART 재무 항목 · 기준일은 보고서 기간"],
+    ["disclosures", "code · since", "DART 공시 목록 + 접수번호"],
+    ["index_series", "index_name", "지수 일봉"],
+    ["macro", "key · limit", "한국은행 ECOS · FRED 시계열"],
+    ["staleness", "market", "원장이 며칠 뒤처졌는가"],
+    ["papers", "key · state", "논문 장부 — 인용 가능 여부 · 붙는 표시"],
   ];
-  const head = ["MCP 도구", "대응 CLI", "반환", "쓰기"].map((h, i) => ({
+  const head = ["MCP 도구", "인자", "반환", "쓰기"].map((h, i) => ({
     text: h, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10.5, valign: "middle",
                         fontFace: FM, align: i === 3 ? "center" : "left" },
   }));
@@ -1161,7 +1163,7 @@ function sMcp() {
   rows.forEach((r, i) => {
     const bg = i % 2 ? PANEL3 : PANEL;
     body.push([
-      { text: r[0], options: { fontFace: FM, bold: true, color: i >= 6 ? CYN : GRN, fontSize: 10, valign: "middle", fill: { color: bg } } },
+      { text: r[0], options: { fontFace: FM, bold: true, color: i === 8 ? CYN : GRN, fontSize: 10, valign: "middle", fill: { color: bg } } },
       { text: r[1], options: { fontFace: FM, color: DIM, fontSize: 9.5, valign: "middle", fill: { color: bg } } },
       { text: r[2], options: { color: INK, fontSize: 9.5, valign: "middle", fill: { color: bg } } },
       { text: "✕", options: { bold: true, color: MAG, fontSize: 12, align: "center", valign: "middle", fill: { color: bg } } },
@@ -1170,7 +1172,7 @@ function sMcp() {
   s.addTable(body, {
     x: M, y: 1.94, w: 7.62, colW: [1.92, 2.28, 2.62, 0.8],
     border: { type: "solid", color: EDGE, pt: 1 },
-    fontFace: F, rowH: 0.47, margin: 0.08, autoPage: false,
+    fontFace: F, rowH: 0.43, margin: 0.08, autoPage: false,
   });
 
   panel(s, { x: 8.42, y: 1.94, w: 4.31, h: 1.9, fill: "24141B", line: "5C2A3A" });
@@ -1187,9 +1189,9 @@ function sMcp() {
 
   panel(s, { x: 8.42, y: 5.60, w: 4.31, h: 1.26, fill: PANEL2, line: EDGE });
   txt(s, "네트워크를 쓰지 않는다", { x: 8.66, y: 5.76, w: 3.8, h: 0.3, fontSize: 12.5, bold: true, color: GLD });
-  txt(s, "여덟 도구 전부 원장만 읽는다. 오래됐으면 stale_days 로 알릴 뿐, 몰래 새로 받아오지 않는다 — facts 가 이미 지키는 규칙이다.", {
+  txt(s, "열 도구 전부 읽기다. 오래됐으면 stale_days 로 알릴 뿐, 몰래 새로 받아오지 않는다. papers 는 원장이 아니라 논문 장부를 읽으므로 등급이 '방법론' 이다.", {
     x: 8.66, y: 6.08, w: 3.86, h: 0.7, fontSize: 9.5, color: MUT });
-  foot(s, "// 기존 규약 유지 — stdout 은 JSON 만, 진단 메시지는 전부 stderr");
+  foot(s, "// 세 겹으로 막는다 — 쓰기 도구가 없다 · 연결이 mode=ro 다 · 생 SQL 을 받지 않는다. stdout 은 JSON 만, 진단은 stderr.");
 }
 
 /* ── NEW: 리스크 레지스터 ── */
@@ -1246,12 +1248,12 @@ function sAppendix() {
     '├─ docs/                 audit.py 에 정의 대조 [10] 추가',
     '├─ RUN_ALL · SCHEDULE    월 07:40 주간 재현 한 줄 추가',
     '│',
-    '├─ agents/               ← 들어감 (자체 검사 166개)',
+    '├─ agents/               ← 들어감 (자체 검사 172개)',
     '│   ├─ envelope.py          봉투 스키마 · 검증기      16',
     '│   ├─ papers.py            논문 장부 ki.papers/2    19',
     '│   ├─ replication.py       재현 러너 (결정적)     20',
     '│   ├─ gates.py             게이트 ①~⑦ 검사기     20',
-    '│   ├─ ki_ledger_mcp.py     MCP 서버 · 읽기 8종    21',
+    '│   ├─ ki_ledger_mcp.py     MCP 서버 · 읽기 10종   27',
     '│   ├─ selftest.py          다섯 개를 한 번에',
     '│   ├─ triggers.py          트리거 스캐너 · 소집      16',
     '│   ├─ cycle.py             주간 논문 사이클         13',
@@ -1288,7 +1290,7 @@ function sAppendix() {
     txt(s, n[0], { x: 8.0, y: y + 0.12, w: 4.5, h: 0.3, fontSize: 12, bold: true, color: n[2] });
     txt(s, n[1], { x: 7.74, y: y + 0.44, w: 4.76, h: 0.56, fontSize: 9.5, color: MUT });
   });
-  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 10 · 데스크 정의 9 · 스킬 5 · 자체 검사 166개 · ki_monitor.py 변경 0줄");
+  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 10 · 데스크 정의 9 · 스킬 5 · 자체 검사 172개 · ki_monitor.py 변경 0줄");
 }
 
 
@@ -1581,8 +1583,8 @@ function sSourcing() {
   mono(s, "17:00", { x: M, y: 3.92, w: 1.5, h: 0.4, fontSize: 18, bold: true, color: "0D1018", align: "center" });
   mono(s, "네트워크\n없음", { x: M, y: 4.38, w: 1.5, h: 0.5, fontSize: 9, bold: true, color: "0D1018", align: "center", lineSpacing: 11 });
   txt(s, "데스크 19개 — 원장만 읽는다", { x: M + 1.7, y: 3.94, w: 5.0, h: 0.3, fontSize: 13.5, bold: true, color: BLU });
-  const tools = ["ledger.facts", "ledger.candles", "ledger.factors", "ledger.calendar",
-                 "ledger.macro", "ledger.disclosure", "ledger.quality", "ledger.papers"];
+  const tools = ["facts", "price_series", "price_series", "calendar",
+                 "macro", "disclosures", "staleness", "papers"];
   tools.forEach((t, i) => {
     const x = M + 1.7 + (i % 4) * 2.62, y = 4.32 + Math.floor(i / 4) * 0.34;
     s.addShape(pres.ShapeType.rect, { x, y, w: 2.5, h: 0.28, fill: { color: PANEL2 }, line: { type: "none" } });
@@ -1615,19 +1617,19 @@ function sSourcing() {
 /* ═══ 구현 규격 — 코드로 옮기기 전에 정할 값 ═══ */
 function sSpec() {
   const s = slide();
-  header(s, "PART 5 · IMPLEMENTATION SPEC", "코드로 옮기기 전에 정해야 할 값",
-         "아래가 비어 있으면 구현할 때 임의로 정하게 된다. 제안값이며, 착수 전에 확정해야 한다.");
+  header(s, "PART 5 · IMPLEMENTATION SPEC", "확정값 — 코드가 이것을 지킨다",
+         "제안이 아니다. 아래 값은 agents/ 에 들어가 있고, 문서와 코드가 어긋나면 docs/audit.py 가 잡는다.");
 
   /* ① 재현 관문 */
   panel(s, { x: M, y: 1.86, w: 6.1, h: 2.42, fill: PANEL, line: GRN });
   mono(s, "① 재현 관문 — 판정 기준", { x: M + 0.2, y: 1.98, w: 5.6, h: 0.26, fontSize: 11, bold: true, color: GRN });
   const rep = [
-    [2.30, "유니버스",  "KOSDAQ 전종목 · 관리종목 · 거래정지 · 스팩 제외", 0.28],
-    [2.58, "최소 표본", "종목 n ≥ 200  AND  영업일 ≥ 500 (미달 시 계산 거부)", 0.28],
-    [2.86, "포트폴리오", "팩터값 5분위 · 월말 리밸런싱 · 동일가중", 0.28],
-    [3.14, "검정 통계", "Q5 − Q1 스프레드 · Newey-West 보정 t", 0.28],
-    [3.44, "판정",      "|t| ≥ 2.0 & 부호 일치 → 재현됨 · 부호 반대 → 방향 반대\n|t| < 2.0                        → 판정 불가", 0.40],
-    [3.90, "재검 순번", "recheck_due 오래된 순 · 주 ≤3편 · 이관분 12편은 4주에 소화", 0.28],
+    [2.30, "유니버스",  "market 인자로 받는다 (기본 KOSDAQ). 종목·월 단위로 거른다", 0.28],
+    [2.58, "최소 표본", "종목 n ≥ 100 · 유효 월 ≥ 36 (미달 시 계산 거부)", 0.28],
+    [2.86, "포트폴리오", "팩터값 5분위 · 월말 리밸런싱 · 동일가중 · rank 로 동값 처리", 0.28],
+    [3.14, "검정 통계", "Q5 − Q1 스프레드 · Newey-West t (시차 4(T/100)^(2/9))", 0.28],
+    [3.44, "판정",      "|t| ≥ 3.0 & 부호 일치 → 재현됨 · 부호 반대 → 방향 반대\n|t| < 3.0                        → 판정 불가", 0.40],
+    [3.90, "재검 순번", "recheck_due 오래된 순 · 주 ≤3편. 트리거와 같은 함수를 쓴다", 0.28],
   ];
   rep.forEach(r => {
     mono(s, r[1], { x: M + 0.2, y: r[0], w: 1.3, h: 0.26, fontSize: 8.6, bold: true, color: CYN });
@@ -1638,13 +1640,13 @@ function sSpec() {
   panel(s, { x: 6.86, y: 1.86, w: 5.87, h: 2.42, fill: PANEL, line: AMB });
   mono(s, "② 트리거 임계값", { x: 7.06, y: 1.98, w: 5.4, h: 0.26, fontSize: 11, bold: true, color: AMB });
   const trg = [
-    ["DART 신규 공시", "dilution · risk 태그가 붙은 건"],
-    ["종가 급변", "|일간수익률| ≥ 8%"],
-    ["거래대금 급증", "20일 중앙값 대비 ≥ 3배"],
-    ["회수계획 변동", "exit_plan.csv 행 변경 감지"],
-    ["락업 만료 임박", "D-30 진입"],
-    ["주간 논문 사이클", "월 07:30 · 신규 ~6 + 재검 ≤3"],
-    ["신선도 경보", "stale_days ≥ 3 영업일"],
+    ["DART 신규 공시", "제목·태그로 q2 · q1 · q4 로 분기 (T1)"],
+    ["종가 급변", "|일간수익률| ≥ 8% · 종목당 1회"],
+    ["락업 만료 임박", "상장일 + 6개월, D-30 영업일 진입"],
+    ["거시 갱신", "macro_daily 최신일 > 감시선 · 하루 1회"],
+    ["재검 기한 도래", "주 ≤3편 (T3) · 은퇴본은 제외"],
+    ["주간 사이클", "월 07:40 · RUN_ALL.cmd cycle"],
+    ["신선도 경보", "stale_days > 3 영업일 → 게이트 ⑤ 반려"],
   ];
   trg.forEach((t, i) => {
     const y = 2.32 + i * 0.27;
@@ -1657,21 +1659,22 @@ function sSpec() {
   panel(s, { x: M, y: 4.44, w: 6.1, h: 2.06, fill: PANEL, line: PUR });
   mono(s, "③ 봉투 — 필수 필드 (게이트가 검사)", { x: M + 0.2, y: 4.56, w: 5.6, h: 0.26, fontSize: 11, bold: true, color: PUR });
   mono(s, [
-    'required: claim · unit · asof · stale_days ·',
-    '          source_grade · sources[] · limits[] ·',
+    'required: claim · asof · source_grade · limits[] ·',
     '          desk · instance',
     '',
-    'value 는 null 허용 — 단 null 이면 reason 필수',
-    'method.paper 가 있으면 method.replication 필수',
-    'paper_state ∈ {unverified, adopted, warned, retired}',
-    '  └ 이관분 unverified · 반감기는 원 채택일 기준',
-    '     전부 도래 상태 → 주 3편 상한으로 4주에 분산',
+    'value 가 있으면  → unit 필수 · read[] 필수',
+    'value 가 null 이면 → reason 필수 (0 으로 채우지 않는다)',
+    'method.paper 가 있으면 → paper_state 필수',
+    '  replication 은 필수가 아니다 — unverified 는 아직 없다',
+    '',
+    'read[] = {source, key, value, asof}   ← 재생 가능성',
+    '  못 읽은 값도 value:null 로 적는다',
   ].join("\n"), { x: M + 0.2, y: 4.88, w: 5.66, h: 1.5, fontSize: 8.2, color: "A9C8F0", lineSpacing: 11, valign: "top" });
 
   /* ④ 예산 · 판정 어휘 */
   panel(s, { x: 6.86, y: 4.44, w: 5.87, h: 2.06, fill: PANEL, line: MAG });
   mono(s, "④ 예산 상한 · 판정 어휘 차단 목록", { x: 7.06, y: 4.56, w: 5.4, h: 0.26, fontSize: 11, bold: true, color: MAG });
-  [["T1 경량", "8K 토큰 · 도구 3회"], ["T2 표준", "32K · 12회"], ["T3 상위", "128K · 40회"]].forEach((t, i) => {
+  [["T1 경량", "12K 토큰 · 도구 6회"], ["T2 표준", "40K · 18회"], ["T3 상위", "90K · 40회"]].forEach((t, i) => {
     const x = 7.06 + i * 1.9;
     s.addShape(pres.ShapeType.rect, { x, y: 4.9, w: 1.78, h: 0.44, fill: { color: PANEL2 }, line: { type: "none" } });
     mono(s, t[0], { x: x + 0.1, y: 4.92, w: 1.6, h: 0.2, fontSize: 8.2, bold: true, color: AMB });
@@ -1680,13 +1683,13 @@ function sSpec() {
   mono(s, "초과 시 '미완' 으로 기록 — 조용히 넘어가지 않는다", {
     x: 7.06, y: 5.4, w: 5.4, h: 0.22, fontSize: 8, italic: true, color: DIM });
   mono(s, "게이트 ① 차단 어휘 (정규식)", { x: 7.06, y: 5.7, w: 5.4, h: 0.22, fontSize: 8.6, bold: true, color: MAG });
-  mono(s, "매수 · 매도 · 비중확대 · 비중축소 · 목표주가 · 적정주가\n투자의견 · 저평가 · 고평가 · 유망 · 추천 · 상승여력", {
+  mono(s, "매수 · 매도 · 저평가 · 고평가 · 추천 · 목표가 · 목표주가\n비중확대 · 비중축소 · 적정주가 · 투자의견 · 강력매수", {
     x: 7.06, y: 5.94, w: 5.44, h: 0.48, fontSize: 8, color: INK, lineSpacing: 11 });
 
   panel(s, { x: M, y: 6.64, w: CW, h: 0.46, fill: PANEL3, line: EDGE });
   txt(s, [
-    { text: "이 값들이 Phase 1 의 실제 산출물이다. ", options: { bold: true, color: GLD } },
-    { text: "코드보다 먼저 한 장으로 합의하고, 바뀌면 이 장을 고친다 — 코드에 흩어 두지 않는다.", options: { color: INK } },
+    { text: "임계 3.0 은 자연상수가 아니다. ", options: { bold: true, color: GLD } },
+    { text: "보정 방식과 가정한 검정 횟수에 따라 달라지는 값이고, 재검 대상이다. 다만 한 번의 판정을 위해 낮추지 않는다 — 낮추려면 사람이 정한다.", options: { color: INK } },
   ], { x: M + 0.26, y: 6.64, w: CW - 0.52, h: 0.46, fontSize: 10, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
 
@@ -1781,13 +1784,13 @@ function sDesk1() {
   const head = ["데스크", "질문", "읽는 것", "내는 것", "제약"].map(h => ({
     text: h, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10, valign: "middle", fontFace: FM } }));
   const rows = [
-    ["q1-progress\n진척역", "얼마나\n왔는가", "ledger.facts (종가·시총·배당)\ndart.fs.* · exit_plan.csv (사내)",
+    ["q1-progress\n진척역", "얼마나\n왔는가", "facts (종가·시총·배당)\ndart.fs.* · exit_plan.csv (사내)",
      "회수계획 대비 진척\n목표회수단가 갭 · 총수익률", "exit_plan 은 '사내' 등급.\n1차와 같은 표에 섞지 않는다", CYN],
-    ["q2-disposal\n처분역", "팔 수\n있는가", "ledger.facts (거래량·거래대금·지분)\nds002/004/005 · ledger.calendar",
+    ["q2-disposal\n처분역", "팔 수\n있는가", "facts (거래량·거래대금·지분)\nds002/004/005 · calendar",
      "처분 소요일수 (평균·중앙값)\n유동성 · 희석 · 락업 잔여", "평균과 중앙값을 함께 낸다.\n락업은 '추정' 등급 고정", GRN],
-    ["q3-execution\n집행역", "어떻게\n팔 것인가", "ledger.facts (일별 거래량)\nq2 의 처분 여건 봉투",
+    ["q3-execution\n집행역", "어떻게\n팔 것인가", "facts (일별 거래량)\nq2 의 처분 여건 봉투",
      "매도 규칙 4종 비교\n충격 가정의 민감도", "권고를 쓰지 않는다.\n주문 API 호출 불가", AMB],
-    ["q4-timing\n시점역", "지금이\n그 때인가", "ledger.macro · ledger.calendar\nledger.disclosure (CAR)",
+    ["q4-timing\n시점역", "지금이\n그 때인가", "macro · calendar\ndisclosures (CAR)",
      "국면 (수준 아닌 분위)\n공시 이벤트 · 다가오는 일정", "일정 등급을 섞지 않는다\n(공표 · 규칙 · 추정)", MAG],
   ];
   const body=[head];
@@ -1812,9 +1815,9 @@ function sDesk2() {
   const head = ["데스크", "역할", "읽는 것", "내는 것", "제약"].map(h => ({
     text: h, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10, valign: "middle", fontFace: FM } }));
   const rows = [
-    ["quant-method\n계량역", "방법론 근거", "ledger.factors · ledger.papers\n(state=adopted 만)",
+    ["quant-method\n계량역", "방법론 근거", "price_series · papers\n(state=adopted 만)",
      "팩터 해설 + limits\n주간 재현 판정 검토", "네 질문 중 하나를 바꾸지 않는\n논문은 채택 대상이 아니다", PUR],
-    ["risk-officer\n검산역  (거부권)", "숫자 재검산", "네 질문 데스크의 봉투 전량\nledger.facts 원본",
+    ["risk-officer\n검산역  (거부권)", "숫자 재검산", "네 질문 데스크의 봉투 전량\nfacts 원본",
      "인용값 vs 원장값 대조\n가정 스트레스", "숫자를 고쳐 주지 않는다 —\n돌려보낸다", MAG],
     ["compliance-officer\n준법감시역  (거부권)", "발행 게이트", "발행 직전의 모든 산출물\nSECTION_SOURCES",
      "일곱 게이트 판정\n발행 승인 / 반려", "하나라도 걸리면 발행 중단.\n조용히 통과시키지 않는다", ORG],
