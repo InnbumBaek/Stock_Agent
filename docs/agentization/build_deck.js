@@ -1841,6 +1841,8 @@ sWall();           sRbac();        sEnvelope();     sGates();     sScorecard();
 sStack();          sMcp();         sSpec();         sDay();       sRoadmap();  sRisk();   sNext();
 sAppendix();
 
-pres.writeFile({ fileName: process.argv[2] || "deck2.pptx" })
+const OUT = process.argv[2] ||
+  path.join(__dirname, "Stock_Agent_에이전트화_계획안.pptx");
+pres.writeFile({ fileName: OUT })
   .then(f => console.log("WROTE " + f))
   .catch(e => { console.error(e); process.exit(1); });
