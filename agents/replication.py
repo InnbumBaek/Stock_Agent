@@ -132,6 +132,21 @@ def _factor_mom_12_1(hist: pd.Series) -> float:
     return float(p_now / p_then - 1.0)
 
 
+def _factor_high52(hist: pd.Series) -> float:
+    """52주 신고가 근접도 — 지금 주가 / 최근 1년 최고가.
+
+    **논문과 같지 않다.** George·Hwang 은 일간 종가 기준 52주 최고가를 쓴다.
+    여기서는 월말 종가 13개의 최고값으로 대용했다. 월중 고점이 빠지므로
+    근접도가 과대평가되고, 그만큼 분위가 위로 쏠린다. 이 사실이 `limits` 에
+    적혀 나가지 않으면 이 값은 논문 값인 척하게 된다."""
+    if hist.size < 13:
+        return float("nan")
+    hi = float(hist.iloc[-13:].max())
+    if not hi:
+        return float("nan")
+    return float(hist.iloc[-1] / hi)
+
+
 def _factor_rev_1m(hist: pd.Series) -> float:
     if hist.size < 2 or not hist.iloc[-2]:
         return float("nan")
@@ -162,6 +177,14 @@ CLAIMS: dict[str, dict] = {
         "limits": ["논문 표본은 미국 대형주 — 코스닥 소형주에서 방향이 뒤집힌다는 보고가 많다",
                    "거래비용을 차감하지 않은 총수익 기준이다"],
     },
+    "gh2004": {
+        "factor": "high52", "sign": +1,
+        "claim": "52주 최고가에 가까운 종목일수록 이후 수익률이 높다",
+        "limits": ["논문은 일간 종가 기준 52주 최고가를 쓴다 — 여기서는 월말 종가 "
+                   "13개의 최고값으로 대용했고, 월중 고점이 빠져 근접도가 "
+                   "과대평가된다",
+                   "논문 표본은 미국 상장주다. 코스닥에서 성립한다는 근거가 아니다"],
+    },
     "j1990": {
         "factor": "rev_1m", "sign": -1,
         "claim": "직전 1개월 수익률이 낮았던 종목이 이후 수익률이 높다 (단기 반전)",
@@ -170,7 +193,54 @@ CLAIMS: dict[str, dict] = {
 }
 
 _FACTOR_KIND = {"amihud": "cross", "turnover": "cross",
-                "mom_12_1": "hist", "rev_1m": "hist"}
+                "mom_12_1": "hist", "rev_1m": "hist", "high52": "hist"}
+
+# ── 재현 대상이 아닌 것 ───────────────────────────────────────────────
+#
+# 장부의 논문이 전부 '아직 재현 안 됨'으로 남아 있으면, 사이클이 밀리고 있는
+# 것처럼 보인다. 실제로는 셋이 섞여 있고 셋은 뜻이 다르다.
+#
+#   · CLAIMS        지금 돌릴 수 있다
+#   · NOT_A_FACTOR  분위 정렬로 검정할 물건이 아니다 — 앞으로도 아니다
+#   · NEEDS_RUNNER  환원은 되는데 이 러너가 아직 못 한다
+#
+# 둘째와 셋째를 섞으면 "우리가 게을러서 안 한 것"과 "원래 이 관문의 대상이
+# 아닌 것"이 구분되지 않는다.
+
+NOT_A_FACTOR = {
+    "roll1984": "유효 스프레드 **추정량**이다. 수익률 방향을 주장하지 않는다 — "
+                "분위로 정렬해 초과수익을 볼 물건이 아니고, 검증은 다른 "
+                "추정량·실측 체결가와 대조하는 방식이어야 한다.",
+    "cs2012": "고가·저가로 스프레드를 재는 **추정량**이다. roll1984 와 같은 이유로 "
+              "분위 검정 대상이 아니다.",
+    "ac2000": "최적 집행 **모형**이다. '이렇게 팔면 비용이 최소'라는 규범적 주장이지 "
+              "'이런 종목이 더 오른다'가 아니다.",
+    "athl2005": "시장충격 함수의 **추정**이다. 우리가 빌려 쓰는 것은 제곱근이라는 "
+                "형태이고, 그 형태는 분위 정렬로 검정되지 않는다.",
+}
+
+NEEDS_RUNNER = {
+    "ritter1991": "IPO 장기 수익률은 **이벤트 시간**(상장일 기준 3~5년 보유)으로 "
+                  "재야 한다. 이 러너는 달력 시간 분위 정렬만 한다 — 이벤트 "
+                  "시간 러너가 따로 필요하다.",
+    "fh2001": "보호예수 해제 전후의 **이벤트 스터디**다. 같은 이유로 이 러너의 "
+              "대상이 아니다.",
+    "ahxz2006": "고유변동성은 **일간** 잔차 변동성으로 재야 한다(논문은 FF3 잔차). "
+                "이 러너의 패널은 월말 종가라 같은 것을 재지 못한다. 월간으로 "
+                "대용하면 다른 측정에 논문 이름을 붙이는 셈이다.",
+}
+
+
+def reducibility(key: str) -> tuple[str, str | None]:
+    """이 논문을 이 러너로 검정할 수 있는가. (분류, 사유) 를 낸다."""
+    if key in CLAIMS:
+        return "testable", None
+    if key in NOT_A_FACTOR:
+        return "not_a_factor", NOT_A_FACTOR[key]
+    if key in NEEDS_RUNNER:
+        return "needs_runner", NEEDS_RUNNER[key]
+    return "unclassified", ("검정 가능한 주장으로 환원할지, 애초에 분위 검정 "
+                            "대상이 아닌지 아직 분류되지 않았습니다.")
 
 
 def decide(mean: float, t: float, expected_sign: int,
@@ -194,14 +264,16 @@ def decide(mean: float, t: float, expected_sign: int,
 
 def run(con: sqlite3.Connection, key: str, market: str = "KOSDAQ",
         start: str = "1900-01-01", end: str = "2999-12-31",
-        t_min: float = T_MIN) -> dict:
+        t_min: float = T_MIN, at: str = None) -> dict:
     """한 논문의 주장 하나를 원장에 대고 계산한다.
 
     낼 것은 판정과 **그 판정이 선 조건**이다. 구간이 바뀌면 판정이 바뀔 수
     있고, 그 변화 자체가 신호다."""
     spec = CLAIMS.get(key)
+    # 판정한 날은 **분석 기준일**이지 벽시계가 아니다. 벽시계를 박으면 같은
+    # 원장을 다른 날 다시 돌린 기록이 구분되지 않고, 재생이 성립하지 않는다.
     out = {
-        "schema": SCHEMA, "paper": key, "at": date.today().isoformat(),
+        "schema": SCHEMA, "paper": key, "at": at or date.today().isoformat(),
         "universe": market, "verdict": VERDICT_NONE, "claim": None,
         "window": None, "n": 0, "periods": 0, "observed": None,
         "t_min": t_min, "t_min_paper": T_MIN_PAPER, "se_paper": NW_PAPER,
@@ -235,8 +307,9 @@ def run(con: sqlite3.Connection, key: str, market: str = "KOSDAQ",
         sig = (df.groupby(["ym", "code"]).apply(fn, include_groups=False)
                  .unstack("code").reindex(index=px.index, columns=px.columns))
     else:
-        fn = {"mom_12_1": _factor_mom_12_1, "rev_1m": _factor_rev_1m}[spec["factor"]]
-        need = 13 if spec["factor"] == "mom_12_1" else 2
+        fn = {"mom_12_1": _factor_mom_12_1, "rev_1m": _factor_rev_1m,
+              "high52": _factor_high52}[spec["factor"]]
+        need = {"mom_12_1": 13, "high52": 13}.get(spec["factor"], 2)
         rows = {}
         for i in range(len(px.index)):
             if i + 1 < need:
@@ -340,6 +413,17 @@ def selftest() -> int:
     def _assert(c, why=""):
         if not c:
             raise AssertionError(why or "거짓")
+
+    def _at_is_the_analysis_date():
+        """판정일은 분석 기준일이다 — 벽시계를 박으면 재생이 성립하지 않는다."""
+        con = _synthetic(effect=0.03, seed=5)
+        a = run(con, "amihud2002", at="2026-09-11")
+        b = run(con, "amihud2002", at="2027-10-01")
+        con.close()
+        _assert(a["at"] == "2026-09-11" and b["at"] == "2027-10-01")
+        _assert(a != b)                     # 같은 원장이어도 기록이 구분된다
+        _assert(a["observed"] == b["observed"])   # 다만 관측값은 같아야 한다
+    check("판정일은 분석 기준일이다", _at_is_the_analysis_date)
 
     check("임계는 3.0 이다 (다중검정 보정)",
           lambda: _assert(T_MIN == 3.0 and T_MIN_PAPER == "hlz2016"))
@@ -477,6 +561,39 @@ def selftest() -> int:
         _assert(ra["verdict"] == rb["verdict"])
         _assert(ra["observed"] == rb["observed"])
     check("두 번 돌리면 같은 결과가 나온다 (결정적)", _deterministic)
+
+    def _reducibility_covers_the_ledger():
+        """장부의 논문이 전부 분류돼 있는가.
+
+        분류되지 않은 논문은 '아직 재현 안 됨'으로 보이지만, 실제로는 재현
+        대상인지조차 정해지지 않은 것이다. 그 둘을 섞으면 사이클이 밀리고 있는
+        정도를 잴 수 없다."""
+        import papers as _P
+        if not _P.LEDGER.exists():
+            return
+        unc = [k for k in (_P.load().get("papers") or {})
+               if reducibility(k)[0] == "unclassified"]
+        _assert(not unc, f"분류되지 않은 논문: {unc}")
+    check("장부의 모든 논문이 분류돼 있다", _reducibility_covers_the_ledger)
+
+    def _buckets_are_disjoint():
+        _assert(not (set(CLAIMS) & set(NOT_A_FACTOR)))
+        _assert(not (set(CLAIMS) & set(NEEDS_RUNNER)))
+        _assert(not (set(NOT_A_FACTOR) & set(NEEDS_RUNNER)))
+        for d in (NOT_A_FACTOR, NEEDS_RUNNER):
+            for k, why in d.items():
+                _assert(why.strip() and len(why) > 30, k)   # 사유 없이 빼지 않는다
+    check("세 분류가 겹치지 않고 사유가 있다", _buckets_are_disjoint)
+
+    def _high52_proxy():
+        """대용한 것은 대용했다고 적혀 있어야 한다."""
+        _assert("대용" in " ".join(CLAIMS["gh2004"]["limits"]))
+        con = _synthetic(effect=0.03, seed=5)
+        r = run(con, "gh2004", at="2026-09-11")
+        con.close()
+        _assert(r["verdict"] in (VERDICT_OK, VERDICT_OPPOSITE, VERDICT_NONE))
+        _assert(r["observed"] is not None, r)
+    check("52주 신고가 근접도가 계산되고 대용을 밝힌다", _high52_proxy)
 
     def _claims_have_limits():
         """모든 주장은 '그 논문이 주장하지 않는 것'을 달고 있어야 한다 (규칙 4)."""

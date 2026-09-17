@@ -1239,17 +1239,21 @@ function sAppendix() {
   panel(s, { x: M, y: 1.90, w: 6.7, h: 4.6, fill: "0A1020", line: EDGE });
   mono(s, [
     'Stock_Agent/',
-    '├─ stock-monitor/        변경 없음 (ki_monitor.py 8,684줄)',
-    '├─ docs/                 변경 없음',
+    '├─ stock-monitor/        ki_monitor.py 변경 0줄 · .papers.json v2',
+    '├─ docs/                 audit.py 에 정의 대조 [10] 추가',
+    '├─ RUN_ALL · SCHEDULE    월 07:40 주간 재현 한 줄 추가',
     '│',
-    '├─ agents/               ← 들어감 (자체 검사 109개)',
+    '├─ agents/               ← 들어감 (자체 검사 151개)',
     '│   ├─ envelope.py          봉투 스키마 · 검증기      16',
     '│   ├─ papers.py            논문 장부 ki.papers/2    19',
-    '│   ├─ replication.py       재현 러너 (결정적)     16',
+    '│   ├─ replication.py       재현 러너 (결정적)     20',
     '│   ├─ gates.py             게이트 ①~⑦ 검사기     20',
     '│   ├─ ki_ledger_mcp.py     MCP 서버 · 읽기 8종    21',
     '│   ├─ selftest.py          다섯 개를 한 번에',
-    '│   └─ triggers.py          트리거 스캐너 · 소집      16',
+    '│   ├─ triggers.py          트리거 스캐너 · 소집      16',
+    '│   ├─ cycle.py             주간 논문 사이클         13',
+    '│   ├─ run_day.py           소집 → 게이트 → 발행     14',
+    '│   └─ scorecard.py         계측 (고치지는 않는다)    11',
     '│',
     '└─ .claude/',
     '    ├─ agents/              데스크 9개 정의',
@@ -1280,7 +1284,7 @@ function sAppendix() {
     txt(s, n[0], { x: 8.0, y: y + 0.12, w: 4.5, h: 0.3, fontSize: 12, bold: true, color: n[2] });
     txt(s, n[1], { x: 7.74, y: y + 0.44, w: 4.76, h: 0.56, fontSize: 9.5, color: MUT });
   });
-  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 6 · 데스크 정의 9 · 스킬 5 · 자체 검사 109개 · ki_monitor.py 변경 0줄");
+  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 9 · 데스크 정의 9 · 스킬 5 · 자체 검사 151개 · ki_monitor.py 변경 0줄");
 }
 
 

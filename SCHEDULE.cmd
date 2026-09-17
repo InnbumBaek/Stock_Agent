@@ -33,6 +33,10 @@ rem    07:30  RUN_ALL.cmd papers    논문 수확 + 채택 (하루 최대 1편)
 rem    08:50  RUN_ALL.cmd morning   리포트만 (비용 없음)
 rem    16:10  RUN_ALL.cmd close     시세 적재
 rem
+rem  월요일에만 하나 더 돕니다.
+rem
+rem    월 07:40  RUN_ALL.cmd cycle   주간 논문 재현 (주 3편 상한)
+rem
 rem  폴더를 옮기면 등록된 경로가 어긋납니다. 다만 RUN_ALL.cmd 가
 rem  돌 때마다 그것을 확인하고 알아서 다시 등록하므로, 보통은
 rem  손댈 일이 없습니다.
@@ -46,6 +50,8 @@ echo.
 echo   07:30  논문 수확 + 문헌 심사  ^(평일 매일 . 대개 몇 초^)
 echo   08:50  아침 리포트 생성  ^(평일 매일 . 비용 없음^)
 echo   16:10  장 마감 시세 적재  ^(평일 매일^)
+echo.
+echo   월 07:40  주간 논문 재현  ^(월요일만 . 네트워크 . 키 불필요^)
 echo.
 echo   월요일 회의 자료는 금요일 밤에 이미 완성됩니다.
 echo   월요일 08:50 은 그것을 리포트로 찍어 내기만 합니다.
@@ -73,6 +79,10 @@ if errorlevel 1 goto :failed
 
 schtasks /Create /TN "StockAgent-AfterClose" /TR "\"%~dp0RUN_ALL.cmd\" close" ^
   /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 16:10 /F
+if errorlevel 1 goto :failed
+
+schtasks /Create /TN "StockAgent-Cycle" /TR "\"%~dp0RUN_ALL.cmd\" cycle" ^
+  /SC WEEKLY /D MON /ST 07:40 /F
 if errorlevel 1 goto :failed
 
 echo.
@@ -104,6 +114,7 @@ echo.
 schtasks /Delete /TN "StockAgent-Papers" /F
 schtasks /Delete /TN "StockAgent-Morning" /F
 schtasks /Delete /TN "StockAgent-AfterClose" /F
+schtasks /Delete /TN "StockAgent-Cycle" /F
 echo.
 echo  해제했습니다. RUN_ALL.cmd 는 그대로 남아 있으니
 echo  손으로는 계속 쓸 수 있습니다.
@@ -120,6 +131,9 @@ if errorlevel 1 echo   아침 작업: 등록돼 있지 않습니다.
 echo.
 schtasks /Query /TN "StockAgent-AfterClose" 2>nul
 if errorlevel 1 echo   마감 작업: 등록돼 있지 않습니다.
+echo.
+schtasks /Query /TN "StockAgent-Cycle" 2>nul
+if errorlevel 1 echo   주간 재현: 등록돼 있지 않습니다.
 goto :end
 
 rem ---------------------------------------------------------- 실패

@@ -12,14 +12,18 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import cycle                                             # noqa: E402
 import envelope                                          # noqa: E402
 import gates                                             # noqa: E402
 import ki_ledger_mcp                                     # noqa: E402
 import papers                                            # noqa: E402
 import replication                                       # noqa: E402
+import run_day                                           # noqa: E402
+import scorecard                                         # noqa: E402
 import triggers                                          # noqa: E402
 
-MODULES = (envelope, papers, replication, gates, triggers, ki_ledger_mcp)
+MODULES = (envelope, papers, replication, gates, triggers,
+           ki_ledger_mcp, cycle, run_day, scorecard)
 
 
 def main() -> int:

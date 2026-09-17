@@ -41,6 +41,7 @@ rem
 rem    RUN_ALL.cmd morning  리포트만 만든다          (평일 08:50)
 rem    RUN_ALL.cmd close    시세 적재 + 금요일 분석   (평일 16:10)
 rem    RUN_ALL.cmd papers   논문 수확 + 문헌 심사     (평일 07:30)
+rem    RUN_ALL.cmd cycle    주간 논문 재현 사이클     (월요일 07:40)
 rem
 rem  대상 시장을 바꾸려면 아래 MARKET 을 KOSPI 로 고치십시오.
 rem  네 갈래 전부 이 한 줄을 씁니다.
@@ -55,6 +56,7 @@ set LOGNAME=runall
 if /I "%MODE%"=="morning" set LOGNAME=morning
 if /I "%MODE%"=="close" set LOGNAME=close
 if /I "%MODE%"=="papers" set LOGNAME=papers
+if /I "%MODE%"=="cycle" set LOGNAME=cycle
 set LOG=%~dp0logs\%STAMP%-%LOGNAME%.log
 
 where python >nul 2>&1
@@ -79,6 +81,7 @@ if not errorlevel 1 goto :sched_done
 schtasks /Create /TN "StockAgent-Morning" /TR "\"%~dp0RUN_ALL.cmd\" morning" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 08:50 /F >nul 2>&1
 schtasks /Create /TN "StockAgent-AfterClose" /TR "\"%~dp0RUN_ALL.cmd\" close" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 16:10 /F >nul 2>&1
 schtasks /Create /TN "StockAgent-Papers" /TR "\"%~dp0RUN_ALL.cmd\" papers" /SC WEEKLY /D MON,TUE,WED,THU,FRI /ST 07:30 /F >nul 2>&1
+schtasks /Create /TN "StockAgent-Cycle" /TR "\"%~dp0RUN_ALL.cmd\" cycle" /SC WEEKLY /D MON /ST 07:40 /F >nul 2>&1
 if errorlevel 1 (
   call :say "     [알림] 자동 실행이 옛 경로를 가리킵니다. 다시 등록하지 못했습니다."
   call :say "            SCHEDULE.cmd 를 관리자 권한으로 한 번 열어 주십시오."
@@ -97,6 +100,7 @@ rem  스케줄러가 부르는 두 갈래는 사람에게 물어보지 않고 �
 if /I "%MODE%"=="morning" goto :auto_morning
 if /I "%MODE%"=="close" goto :auto_close
 if /I "%MODE%"=="papers" goto :auto_papers
+if /I "%MODE%"=="cycle" goto :auto_cycle
 
 call :say ""
 call :say "  ==============================================="
@@ -259,6 +263,25 @@ popd
 call :say "완료"
 exit /b 0
 
+rem ==========================================================
+rem  주간 논문 재현 사이클 - 월요일 07:40
+rem
+rem  수확(07:30)이 끝난 뒤에 돈다. 재검 기한이 온 논문을 우리 원장에
+rem  대고 다시 계산하고, 기한이 지난 채택본을 warned 로 내린다.
+rem  주 3편 상한이 있어서 기한이 몰린 주에도 세 편만 돈다.
+rem
+rem  네트워크도 키도 쓰지 않는다 - 이미 받아 둔 원장만 읽는다.
+rem  원장이 없으면 사유를 로그에 적고 그대로 끝난다.
+rem ==========================================================
+:auto_cycle
+call :say "============================================"
+call :say " %DATE% %TIME%  -  주간 논문 재현 사이클"
+call :say "============================================"
+%PY% agents\cycle.py --run >> "%LOG%" 2>&1
+if errorlevel 1 call :say "  사이클이 끝까지 돌지 못했습니다. 로그를 보십시오."
+call :say "완료"
+exit /b 0
+
 rem ---------------------------------------------------------- 유틸
 :keys
 rem  키를 스스로 구해 온다. 여기서 사람에게 일을 시키지 않는다.
@@ -287,6 +310,7 @@ if /I "%MODE%"=="auto" goto :keys_none
 if /I "%MODE%"=="morning" goto :keys_none
 if /I "%MODE%"=="close" goto :keys_none
 if /I "%MODE%"=="papers" goto :keys_none
+if /I "%MODE%"=="cycle" goto :keys_none
 echo.
 echo      쓰시던 .env 를 못 찾았습니다.
 echo      그 파일을 탐색기에서 이 창으로 끌어다 놓고 엔터를 치십시오.
@@ -367,6 +391,7 @@ if /I "%MODE%"=="auto" goto :nopause
 if /I "%MODE%"=="morning" goto :nopause
 if /I "%MODE%"=="close" goto :nopause
 if /I "%MODE%"=="papers" goto :nopause
+if /I "%MODE%"=="cycle" goto :nopause
 pause
 :nopause
 endlocal
