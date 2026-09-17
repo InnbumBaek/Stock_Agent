@@ -68,9 +68,9 @@ def gate1_verdict_words(env: dict, **_) -> Result:
     if hit or bad_keys:
         why = []
         if hit:
-            why.append(f"판정 어휘: {', '.join(hit)}")
+            why.append(f"금지된 말 {', '.join(hit)}")
         if bad_keys:
-            why.append(f"판단을 뜻하는 키: {', '.join(bad_keys)}")
+            why.append(f"판단을 뜻하는 키 {', '.join(bad_keys)}")
         return Result("①", "판정 어휘", False,
                       " · ".join(why) + " — 해당 문장을 삭제한 뒤 다시 내십시오")
     return Result("①", "판정 어휘", True)

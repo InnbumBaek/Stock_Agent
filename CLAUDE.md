@@ -16,6 +16,11 @@ SCHEDULE.cmd      평일 자동 실행 등록 (07:30 · 08:50 · 16:10)
 문장이 나가도 되는지 검사한다. 두 층 사이의 관문이 이 저장소의 요점이다
 (`agents/README.md`).
 
+데스크 9개와 규칙 5종의 정의는 `.claude/agents/` · `.claude/skills/` 에 있다.
+**그 정의 파일은 테스트가 돌려 보지 않는다** — 데스크 이름을 코드에서 바꾸고
+`.md` 를 안 고치면 트리거는 있는데 아무도 오지 않는 소집이 생기고, 그것은 오류
+한 줄 없이 "조용한 날"처럼 보인다. `docs/audit.py` 가 대조한다.
+
 ---
 
 ## 절대 깨지 말아야 할 것
@@ -144,7 +149,7 @@ OpenAlex · Crossref)에서 후보를 쌓고, `--adopt` 이 발행 정보를 Cro
 
 ```bash
 cd stock-monitor && python ki_monitor.py selftest   # 128개 (키·네트워크 불필요)
-python agents/selftest.py                           # 93개 (판단층)
+python agents/selftest.py                           # 109개 (판단층)
 python docs/audit.py                                # 저장소 전반
 ```
 

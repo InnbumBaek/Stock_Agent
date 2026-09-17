@@ -17,8 +17,9 @@ import gates                                             # noqa: E402
 import ki_ledger_mcp                                     # noqa: E402
 import papers                                            # noqa: E402
 import replication                                       # noqa: E402
+import triggers                                          # noqa: E402
 
-MODULES = (envelope, papers, replication, gates, ki_ledger_mcp)
+MODULES = (envelope, papers, replication, gates, triggers, ki_ledger_mcp)
 
 
 def main() -> int:

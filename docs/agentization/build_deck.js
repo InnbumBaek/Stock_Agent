@@ -440,16 +440,16 @@ function sTriggers() {
          "트리거는 원장의 변화에서 나온다. 사람이 부르는 것이 아니라 데이터가 부른다.");
 
   const rows = [
-    ["DART 신규 공시", "equity · credit · governance", "접수번호 1건", "공시당 1", "공시 종류로 분기 · 원문 링크"],
-    ["종가 ±8% 이상 변동", "liquidity · concentration-risk", "종목코드 · 기준일", "종목당 1", "처분여건 재계산 · 집중도 재점검"],
-    ["회수계획 진척 변동", "execution-trader", "exit_plan 행", "종목당 1", "§7 집행 시뮬 재실행"],
-    ["재현 재검 기한 도래", "quant-researcher · model-risk", "논문 키 1개", "일 1편", "재현 판정 + 설계 검증 + 원장 append"],
-    ["ECOS·캘린더 갱신", "macro-strategist", "지표 · 일정", "일 1", "§4·§7 국면 서술"],
-    ["락업 만료 D-30 진입", "execution · macro", "종목코드", "종목당 1", "물량 압력 · 시점 코멘트 (등급 '추정')"],
-    ["봉투 묶음 완성", "market-risk · concentration-risk", "그날 봉투 전량", "일 1", "숫자 재검산 · 반려 또는 통과"],
-    ["게이트 통과분 확정", "research-editor · ic-chair", "통과 봉투", "일 1", "문장 정리 → 조립 · 쟁점 정렬"],
+    ["DART 신규 공시 · 희석/지분", "q2-disposal", "접수번호 1건", "공시당 1", "자본구조·희석 재계산 (T1)"],
+    ["DART 신규 공시 · 실적", "q1-progress", "접수번호 1건", "공시당 1", "회수계획 대비 진척 갱신 (T1)"],
+    ["DART 신규 공시 · 그 밖", "q4-timing", "접수번호 1건", "공시당 1", "이벤트로 시점 판단에 반영 (T1)"],
+    ["종가 ±8% 이상 변동", "q2-disposal · risk-officer", "종목코드 · 기준일", "종목당 1", "처분여건 재계산 · 숫자 재검산"],
+    ["락업 만료 D-30 진입", "q3-execution · q4-timing", "종목코드 · 해제일", "종목당 1", "물량 압력 · 시점 (등급 '추정')"],
+    ["ECOS·캘린더 갱신", "q4-timing", "지표 키 목록", "일 1", "국면 서술"],
+    ["재현 재검 기한 도래", "quant-method", "논문 키", "주 3편", "재현 판정 → 장부 append (T3)"],
+    ["봉투 묶음 완성 · 게이트", "risk-officer · compliance-officer", "그날 봉투 전량", "일 1", "재검산 → 게이트 ①~⑦ → 발행"],
   ];
-  const head = ["트리거 (원장의 변화)", "소집되는 에이전트", "넘겨받는 입력", "인스턴스", "산출"].map((h, i) => ({
+  const head = ["트리거 (원장의 변화)", "소집되는 데스크", "넘겨받는 입력", "상한", "산출"].map((h, i) => ({
     text: h, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10.5, valign: "middle", fontFace: FM },
   }));
   const body = [head];
@@ -469,7 +469,7 @@ function sTriggers() {
   panel(s, { x: M, y: 6.14, w: CW, h: 0.62, fill: PANEL3, line: EDGE });
   txt(s, [
     { text: "트리거가 없으면 아무도 소집되지 않는다. ", options: { bold: true, color: GRN } },
-    { text: "조용한 날은 조용한 것이 정상이다 — 할 말이 없는데 데스크를 돌려 말을 만들게 하는 것이 이 구조가 막으려는 실패다.", options: { color: INK } },
+    { text: "조용한 날은 조용한 것이 정상이다 — 할 말이 없는데 데스크를 돌려 말을 만들게 하는 것이 이 구조가 막으려는 실패다. 상설 셋(data-ops · compliance-officer · ic-chair)은 그래도 매일 돈다.", options: { color: INK } },
   ], { x: M + 0.26, y: 6.14, w: CW - 0.52, h: 0.62, fontSize: 11, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
 
@@ -1242,14 +1242,14 @@ function sAppendix() {
     '├─ stock-monitor/        변경 없음 (ki_monitor.py 8,684줄)',
     '├─ docs/                 변경 없음',
     '│',
-    '├─ agents/               ← Phase 1 완료 (93개 검사)',
+    '├─ agents/               ← 들어감 (자체 검사 109개)',
     '│   ├─ envelope.py          봉투 스키마 · 검증기      16',
     '│   ├─ papers.py            논문 장부 ki.papers/2    19',
     '│   ├─ replication.py       재현 러너 (결정적)     16',
     '│   ├─ gates.py             게이트 ①~⑦ 검사기     20',
     '│   ├─ ki_ledger_mcp.py     MCP 서버 · 읽기 8종    21',
     '│   ├─ selftest.py          다섯 개를 한 번에',
-    '│   └─ triggers.py          트리거 스캐너 (Phase 2)',
+    '│   └─ triggers.py          트리거 스캐너 · 소집      16',
     '│',
     '└─ .claude/',
     '    ├─ agents/              데스크 9개 정의',
@@ -1280,7 +1280,7 @@ function sAppendix() {
     txt(s, n[0], { x: 8.0, y: y + 0.12, w: 4.5, h: 0.3, fontSize: 12, bold: true, color: n[2] });
     txt(s, n[1], { x: 7.74, y: y + 0.44, w: 4.76, h: 0.56, fontSize: 9.5, color: MUT });
   });
-  foot(s, "// Phase 1 은 실제로 들어갔다 — agents/ 파이썬 다섯 파일 · 자체 검사 93개 · ki_monitor.py 변경 0줄");
+  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 6 · 데스크 정의 9 · 스킬 5 · 자체 검사 109개 · ki_monitor.py 변경 0줄");
 }
 
 

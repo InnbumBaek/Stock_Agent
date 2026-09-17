@@ -337,6 +337,58 @@ _over = [n for n in ('"ki.sqlite"', '"watchlist.csv"', '"positions.csv"',
          if f"keys_path({n})" in _km2]
 (ok if not _over else bad)(f"키만 옮겼는가 ({_over or '키뿐'})")
 
+# ── [10] 데스크·스킬 정의가 코드와 어긋나지 않는가 ──────────────────
+#
+# 마크다운 정의 파일은 테스트가 돌려 보지 않는다. 데스크 이름 하나를 코드에서
+# 바꾸고 .md 를 안 고치면, 트리거는 있는데 아무도 오지 않는 소집이 생긴다.
+# 그것은 오류 한 줄 없이 "조용한 날"처럼 보인다.
+print("\n[10] 데스크·스킬 정의가 코드와 맞는가")
+_ag_dir = ROOT / ".claude" / "agents"
+_sk_dir = ROOT / ".claude" / "skills"
+if not (ROOT / "agents" / "triggers.py").exists():
+    warn("agents/triggers.py 가 없습니다 — 건너뜁니다")
+else:
+    sys.path.insert(0, str(ROOT / "agents"))
+    import triggers as _T
+
+    _md = sorted(f.stem for f in _ag_dir.glob("*.md")) if _ag_dir.exists() else []
+    _code = sorted(_T.DESKS)
+    (ok if _md == _code else bad)(
+        f"데스크 정의 9개가 코드와 일치 ({'일치' if _md == _code else f'.md={_md} ≠ code={_code}'})")
+
+    # frontmatter 의 name 이 파일명과 같은가 — 다르면 호출되지 않는다.
+    _mis = []
+    for f in sorted(_ag_dir.glob("*.md")) if _ag_dir.exists() else []:
+        head = f.read_text(encoding="utf-8").split("---")[1] if "---" in f.read_text(encoding="utf-8") else ""
+        nm = re.search(r"^name:\s*(\S+)", head, re.M)
+        if not nm or nm.group(1) != f.stem:
+            _mis.append(f.name)
+    (ok if not _mis else bad)(f"데스크 frontmatter name 이 파일명과 일치 ({_mis or '일치'})")
+
+    # 트리거가 부르는 데스크가 전부 실재하는가
+    _unknown = sorted({d for _w, ds, _y in _T.DISCLOSURE_ROUTES for d in ds
+                       if d not in _T.DESKS}
+                      | {d for d in _T.DISCLOSURE_DEFAULT[0] if d not in _T.DESKS})
+    (ok if not _unknown else bad)(f"트리거가 실재하는 데스크만 부른다 ({_unknown or '전부 실재'})")
+
+    _skills = sorted(d.name for d in _sk_dir.iterdir() if d.is_dir()) if _sk_dir.exists() else []
+    _want = ["compliance-gate", "envelope-schema", "paper-adoption",
+             "replication", "source-grading"]
+    (ok if _skills == _want else bad)(f"스킬 5종 ({_skills if _skills != _want else '전부 있음'})")
+    _noskill = [d for d in _skills if not (_sk_dir / d / "SKILL.md").exists()]
+    (ok if not _noskill else bad)(f"스킬마다 SKILL.md 가 있다 ({_noskill or '전부 있음'})")
+
+    # 임계는 한 곳에서만 정해져야 한다. 문서가 다른 숫자를 말하면 그 문서가 규칙이 된다.
+    import replication as _R
+    _tbad = []
+    for f in list(_ag_dir.glob("*.md")) + list(_sk_dir.glob("*/SKILL.md")):
+        txt = f.read_text(encoding="utf-8")
+        for m in re.finditer(r"\|t\|\s*[≥>=]+\s*([0-9.]+)", txt):
+            if float(m.group(1)) != _R.T_MIN:
+                _tbad.append(f"{f.name}:{m.group(1)}")
+    (ok if not _tbad else bad)(
+        f"문서의 재현 임계가 코드와 일치 (t≥{_R.T_MIN}) ({_tbad or '일치'})")
+
 print("\n" + "=" * 60)
 if fails:
     print(f"실패 {len(fails)}건")
