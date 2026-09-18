@@ -49,6 +49,7 @@ REL_TOL = 0.10
 READ_CONFLICT = "같은 칸을 다르게 읽음"
 PAPER_CONFLICT = "같은 논문을 다른 상태로 인용"
 MEASURE_GAP = "같은 것을 쟀는데 값이 벌어짐"
+UNIT_MISMATCH = "같은 이름인데 단위가 다름"
 
 
 def _num(v):
@@ -114,6 +115,22 @@ def conflicts(envelopes: list, rel_tol: float = REL_TOL) -> list:
         # ③ 같은 것을 쟀는데 값이 벌어졌다
         if (a.get("measure") and a.get("measure") == b.get("measure")
                 and a.get("subject") == b.get("subject")):
+            ua, ub = a.get("unit"), b.get("unit")
+            if ua != ub:
+                # 25 business_days 와 25 hours 는 **같은 값이 아니다.** 단위를
+                # 안 보고 숫자만 비교하면 "대조했고 일치했다"가 회의에 올라간다.
+                # 거짓 합의야말로 이 모듈이 막으려던 것이다.
+                out.append({
+                    "kind": UNIT_MISMATCH, "measure": a["measure"],
+                    "subject": a.get("subject"),
+                    "left": {"instance": ia, "desk": da, "unit": ua,
+                             "value": a.get("value")},
+                    "right": {"instance": ib, "desk": db, "unit": ub,
+                              "value": b.get("value")},
+                    "why": ("같은 이름으로 쟀는데 단위가 다릅니다. 값을 비교하지 "
+                            "않았습니다 — 이름이 같으면 단위도 같아야 합니다."),
+                })
+                continue
             va, vb = _num(a.get("value")), _num(b.get("value"))
             if va is not None and vb is not None:
                 scale = max(abs(va), abs(vb))
@@ -145,11 +162,21 @@ def review(envelopes: list, rel_tol: float = REL_TOL) -> dict:
                      "claim": e.get("claim")}
                     for e in envs if e.get("value") is not None and not e.get("measure")]
 
+    # 단위가 어긋난 짝은 **비교하지 않았다.** 비교한 것으로 세면 "대조했고
+    # 일치했다"가 되어, 거짓 합의가 숫자로 뒷받침된다.
+    mismatched = {(c["left"]["instance"], c["right"]["instance"])
+                  for c in cs if c["kind"] == UNIT_MISMATCH}
     measured = {}
     for e in envs:
         if e.get("measure") and e.get("value") is not None:
             measured.setdefault((e["measure"], e.get("subject")), []).append(e)
-    compared = sum(1 for v in measured.values() if len(v) > 1)
+    compared = 0
+    for v in measured.values():
+        for i in range(len(v)):
+            for j in range(i + 1, len(v)):
+                pair = (v[i].get("instance"), v[j].get("instance"))
+                if pair not in mismatched and pair[::-1] not in mismatched:
+                    compared += 1
 
     return {
         "schema": SCHEMA, "n_envelopes": len(envs), "rel_tol": rel_tol,
@@ -265,6 +292,27 @@ def selftest() -> int:
         _assert(cs[0]["paper"] == "amihud2002")
         _assert("낡은 것" in cs[0]["why"])
     check("같은 논문을 다른 상태로 인용하면 잡는다", _paper_state_conflict)
+
+    def _unit_mismatch_is_not_agreement():
+        """같은 이름인데 단위가 다르면 **비교하지 않은 것**이다.
+
+        25 business_days 와 25 hours 를 숫자만 보고 "일치"라고 하면, 거짓
+        합의가 '대조했다'는 숫자로 뒷받침된 채 회의에 올라간다. 이 모듈이
+        막으려던 실패 그 자체다."""
+        a = _env("q2-disposal", 25.0); b = _env("risk-officer", 25.0)
+        b["unit"] = "hours"
+        r = review([a, b])
+        cs = [c for c in r["conflicts"] if c["kind"] == UNIT_MISMATCH]
+        _assert(len(cs) == 1, r["conflicts"])
+        _assert(cs[0]["left"]["unit"] != cs[0]["right"]["unit"])
+        _assert("비교하지 않았습니다" in cs[0]["why"])
+        _assert(r["compared_pairs"] == 0, "비교하지 않았는데 비교한 것으로 셌습니다")
+    check("같은 이름인데 단위가 다르면 비교하지 않는다", _unit_mismatch_is_not_agreement)
+
+    def _same_unit_still_compares():
+        r = review([_env("q2-disposal", 25.0), _env("risk-officer", 25.4)])
+        _assert(r["compared_pairs"] == 1 and r["n_conflicts"] == 0)
+    check("단위가 같으면 그대로 비교한다", _same_unit_still_compares)
 
     def _different_subject():
         r = review([_env("q2-disposal", 25.0, subject="000660"),

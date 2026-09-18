@@ -49,6 +49,7 @@ def tally(runs: list) -> dict:
     halted = 0
     n_in = n_pass = n_rej = 0
     incomplete = 0
+    retried = 0
     calls = []
     days = []
 
@@ -79,6 +80,10 @@ def tally(runs: list) -> dict:
                 tiers[env["tier"]] += 1
             if env.get("escalated_from"):
                 escalated[f"{env['escalated_from']}→{env.get('tier')}"] += 1
+            # 재시도는 승격이 아니다. 따로 세지 않으면, 같은 급에서 두 번
+            # 도는 데스크가 "한 번에 통과한 데스크"와 구분되지 않는다.
+            if (env.get("attempt") or 1) > 1:
+                retried += 1
             sp = env.get("spent") or {}
             if sp.get("completed") is False:
                 incomplete += 1
@@ -122,9 +127,13 @@ def tally(runs: list) -> dict:
         "marks": sat,
         "tiers": dict(tiers),
         "escalations": [{"path": k, "n": v} for k, v in escalated.most_common()],
-        "escalation_note": ("집행할 수 있는 승격 사유는 둘뿐입니다 — 게이트 반려와 "
-                            "예산 미완. 데스크 간 판정이 갈리는 경우는 아직 세지 "
-                            "않습니다."),
+        "retried": retried,
+        "retried_share": _pct(retried, n_in),
+        "escalation_note": ("집행하는 승격 사유는 셋입니다 — 게이트에 두 번 연속 "
+                            "반려 · 예산 미완 · 데스크 간 판정이 갈림. 첫 반려는 "
+                            "승격이 아니라 같은 급에서의 재시도이고, retried 로 "
+                            "따로 셉니다. 리스크 검산 불일치는 위의 '갈림'이 "
+                            "덮고, 재현 '판정 불가'는 사이클이 따로 돕니다."),
         # 호출 수만 센다. 토큰은 신뢰성 있게 셀 수 없어 봉투가 담지 않는다.
         "spent": {
             "incomplete": incomplete,
@@ -281,12 +290,33 @@ def selftest() -> int:
         _assert("tokens" not in json.dumps(r["spent"]))
     check("미완과 호출 수를 세고 토큰은 세지 않는다", _spent_counted)
 
+    def _retry_counted_separately():
+        """재시도는 승격이 아니다 — 따로 세지 않으면 한 번에 통과한 것과 같아 보인다."""
+        run = _run("2026-09-18", [("q2-disposal", True, None, "T2"),
+                                  ("q1-progress", True, None, "T2")])
+        run["publishable"][0]["envelope"] = {"tier": "T2", "attempt": 2}
+        run["publishable"][1]["envelope"] = {"tier": "T2", "attempt": 1}
+        r = tally([run])
+        _assert(r["retried"] == 1, r)
+        _assert(r["retried_share"] == 0.5)
+        _assert(r["escalations"] == [])          # 재시도는 승격으로 안 센다
+    check("재시도를 승격과 따로 센다", _retry_counted_separately)
+
+    def _escalation_note_matches_code():
+        """문구가 실제 집행 사유와 맞는가. 안 맞으면 그 문구가 규칙처럼 읽힌다."""
+        import run_day as D
+        r = tally([_run("2026-09-18", [("q2-disposal", True, None, "T2")])])
+        _assert("셋" in r["escalation_note"], r["escalation_note"])
+        _assert(len(D.ESCALATABLE) == 3)
+        _assert("두 번 연속" in r["escalation_note"])
+    check("승격 문구가 실제 집행 사유와 맞는다", _escalation_note_matches_code)
+
     def _escalation_counted():
         run = _run("2026-09-18", [("q2-disposal", True, None, "T3")])
         run["publishable"][0]["envelope"] = {"tier": "T3", "escalated_from": "T2"}
         r = tally([run])
         _assert(r["escalations"] == [{"path": "T2→T3", "n": 1}], r["escalations"])
-        _assert("둘뿐" in r["escalation_note"])
+        _assert("셋" in r["escalation_note"])
     check("승격 분포를 센다 (이제 실제로 채워지는 칸이다)", _escalation_counted)
 
     def _tiers():

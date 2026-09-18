@@ -166,6 +166,16 @@ ESCALATABLE = ("gate_rejected", "budget_incomplete", "desks_disagree")
 RETRY_FIRST = ("gate_rejected",)
 
 
+def _assumes_of(env: dict) -> dict:
+    """봉투의 가정. `method` 는 없을 수 있다 — 논문을 안 쓴 데스크도 있고,
+    ⑦ 4-eyes 반려처럼 method 가 비어 있는 채로 오는 경우가 흔하다.
+
+    여기서 터지면 그 한 건이 아니라 **승격 단계 전체**가 죽는다. 다른 승격도
+    stuck 도 함께 사라지고, 로그에는 스택 트레이스만 남는다."""
+    m = env.get("method")
+    return dict(m.get("assumes") or {}) if isinstance(m, dict) else {}
+
+
 def _subject_of(env: dict) -> str:
     rd = env.get("read") or [{}]
     return str(rd[0].get("key", env.get("subject") or "na")).split(".")[0]
@@ -197,6 +207,18 @@ def escalate(published: dict, envelopes: list, at: str = None,
             cands.append((c[side].get("instance"), "desks_disagree",
                           f"{c['kind']} — {c['why']}"))
 
+    # 한 인스턴스에 사유가 여럿이면 **올리는 쪽이 이긴다.** 첫 반려는 같은
+    # 급에서 다시 하는데, 예산을 이미 다 쓴 인스턴스를 같은 예산으로 다시
+    # 돌리면 같은 벽에 부딪힌다 — 그리고 예산 미완이라는 사실이 기록에서
+    # 사라진다.
+    #
+    # 갈림이 반려보다 앞에 오는 것도 같은 이유다. 갈린 쪽이 마침 반려되기도
+    # 했다고 해서 그쪽만 같은 급에 남으면, **양쪽이 함께 올라간다**는 규칙이
+    # 깨진다 (CLAUDE.md 4-c). 한쪽만 올리면 그 선택 자체가 판정이다.
+    rank = {w: i for i, w in enumerate(("budget_incomplete", "desks_disagree",
+                                        "gate_rejected"))}
+    cands.sort(key=lambda c: rank.get(c[1], 99))
+
     seen, retries = set(), []
     for inst, why, detail in cands:
         if inst in seen:
@@ -223,9 +245,11 @@ def escalate(published: dict, envelopes: list, at: str = None,
                 "budget": dict(BUDGET[tier]),
                 "escalated_from": None, "escalated_because": None,
                 "trigger": {"kind": "retry", "subject": inst, "why": detail},
-                "inputs": dict(env.get("method", {}).get("assumes") or {}),
+                "inputs": _assumes_of(env),
                 "tools": ["mcp__ki-ledger__*"],
                 "must": [f"반려 사유를 먼저 읽어라: {detail}",
+                         f'봉투에 "attempt": {attempt + 1} 을 적어라 — 적지 '
+                         f"않으면 같은 급에서 영원히 반복되고 승격이 오지 않는다",
                          "같은 급에서 다시 낸다. 또 반려되면 위로 올라간다"],
             })
             continue
@@ -249,11 +273,12 @@ def escalate(published: dict, envelopes: list, at: str = None,
             "budget": dict(BUDGET[nxt]),
             "escalated_from": tier, "escalated_because": why,
             "trigger": {"kind": "escalation", "subject": inst, "why": detail},
-            "inputs": dict(env.get("method", {}).get("assumes") or {}),
+            "inputs": _assumes_of(env),
             "tools": ["mcp__ki-ledger__*"],
             "must": [
                 f"{tier} 에서 막힌 이유를 먼저 읽어라: {detail}",
-                "봉투에 escalated_from 을 적어라 — 왜 올라왔는지가 남아야 한다",
+                f'봉투에 "escalated_from": "{tier}" 와 "attempt": 1 을 적어라 '
+                f"— 왜 올라왔는지가 남아야 한다",
                 "같은 이유로 또 막히면 그것은 프롬프트가 아니라 규칙 문서의 문제다",
             ],
         }
@@ -507,6 +532,49 @@ def selftest() -> int:
         _assert(r["retried"] == [], r["retried"])
         _assert(r["n"] == 2)
     check("판정이 갈리면 다시 하지 않고 바로 올린다", _disagreement_does_not_retry)
+
+    def _both_sides_go_up_even_if_one_was_rejected():
+        """갈린 쪽이 마침 반려되기도 했다고 해서 그쪽만 남으면 안 된다.
+
+        한쪽만 올리면 그 선택 자체가 판정이 된다 (CLAUDE.md 4-c)."""
+        a = RC._env("q2-disposal", 25.0); b = RC._env("risk-officer", 41.0)
+        a["tier"] = b["tier"] = "T2"
+        a["claim"] = "처분 25일 — 매도 검토"        # 한쪽만 판정 어휘
+        r = escalate(publish([a, b], led, at="2026-09-18"), [a, b], at="2026-09-18")
+        up = sorted(x["desk"] for x in r["escalated"])
+        _assert(up == ["q2-disposal", "risk-officer"], r["escalated"])
+        _assert(r["retried"] == [], r["retried"])
+    check("갈린 한쪽이 반려돼도 양쪽 다 올라간다", _both_sides_go_up_even_if_one_was_rejected)
+
+    def _budget_beats_rejection():
+        """예산을 다 쓴 인스턴스를 같은 예산으로 다시 돌리지 않는다."""
+        e = G._env(claim="희석 4.2% — 매도 검토"); e["tier"] = "T2"
+        e["spent"] = E.spent(18, False, "예산 18회를 다 썼습니다")
+        r = escalate(publish([e], led, at="2026-09-18"), [e], at="2026-09-18")
+        _assert(r["retried"] == [], r["retried"])
+        _assert(r["escalated"][0]["why"] == "budget_incomplete", r["escalated"])
+    check("예산 미완이 반려보다 먼저다 (같은 벽에 다시 부딪히지 않는다)",
+          _budget_beats_rejection)
+
+    def _no_method_does_not_kill_the_stage():
+        """method 가 없는 봉투 하나가 승격 단계 전체를 죽이지 않는다.
+
+        ⑦ 4-eyes 반려는 아주 흔하고, 그때 method 가 비어 있을 수 있다. 거기서
+        터지면 그 한 건이 아니라 다른 승격도 stuck 도 함께 사라진다."""
+        bad = E.make("값", value=1.0, unit="d", desk="q2-disposal",
+                     asof="2026-09-18", stale_days=1, source_grade="해석",
+                     sources=["KRX"], subject="000660", attempt=2,
+                     read=[E.observation("KRX", "000660.close", 88.0, "2026-09-18")],
+                     limits=["x"])
+        bad["reviewed_by"] = ["risk"]              # compliance 없음 → ⑦ 반려
+        _assert(bad["method"] is None and E.validate(bad) == [])
+        ok = G._env()
+        ok["spent"] = E.spent(18, False, "예산 초과")
+        r = escalate(publish([bad, ok], led, at="2026-09-18"), [bad, ok],
+                     at="2026-09-18")
+        _assert(r["n"] == 2, r)                    # 둘 다 살아서 올라간다
+    check("method 없는 봉투가 승격 단계를 죽이지 않는다",
+          _no_method_does_not_kill_the_stage)
 
     def _only_enforceable_reasons():
         """집행할 수 없는 조건을 있는 척 세지 않는다."""

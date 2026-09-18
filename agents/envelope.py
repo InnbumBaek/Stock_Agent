@@ -322,7 +322,9 @@ def promote(env: dict, to: str) -> tuple[bool, str]:
 
 def make(claim, *, desk, asof, source_grade, limits, value=None, unit=None,
          sources=None, method=None, reason=None, subject="", tier="T2",
-         stale_days=None, salt="", read=None, measure=None) -> dict:
+         stale_days=None, salt="", read=None, measure=None,
+         attempt: int = 1, escalated_from: str = None,
+         spent: dict = None) -> dict:
     """봉투를 짓는다. 지어낸 값을 채워 넣지 않는다 — 빠진 것은 빠진 채로 둔다."""
     env = {
         "schema": SCHEMA,
@@ -341,9 +343,9 @@ def make(claim, *, desk, asof, source_grade, limits, value=None, unit=None,
         "reason": reason,
         "desk": desk,
         "tier": tier,
-        "escalated_from": None,
-        "attempt": 1,
-        "spent": None,
+        "escalated_from": escalated_from,
+        "attempt": attempt,
+        "spent": spent,
         "reviewed_by": [],
         "instance": new_instance(desk, asof, subject or "na", salt),
     }
@@ -535,6 +537,19 @@ def selftest() -> int:
             e["attempt"] = bad
             _assert(any("attempt" in x for x in validate(e)), bad)
     check("몇 번째 시도인지 적을 수 있다", _attempt)
+
+    def _make_round_trips_the_work_order():
+        """작업지시서가 준 attempt·escalated_from 을 봉투가 되받을 수 있어야 한다.
+
+        못 받으면 재시도가 영원히 attempt=1 로 돌아 승격이 도달하지 않는다."""
+        e = make("a", desk="q2-disposal", asof="2026-09-18", source_grade="해석",
+                 limits=["x"], attempt=2, escalated_from="T1", tier="T2",
+                 spent=spent(7, True), reason="일봉이 12개뿐입니다")
+        _assert(e["attempt"] == 2 and e["escalated_from"] == "T1")
+        _assert(e["spent"]["tool_calls"] == 7)
+        _assert(validate(e) == [], validate(e))
+    check("작업지시서의 attempt·승격기록을 봉투가 되받는다",
+          _make_round_trips_the_work_order)
 
     def _spent_shape():
         e = _sample()
