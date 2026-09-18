@@ -417,6 +417,21 @@ else:
         (ok if not _drift else bad)(
             f"agents/README.md 모듈별 개수 ({_drift or '일치'})")
 
+    # 덱의 JSON 예시에 코드에 없는 필드명이 있으면, 회의에서 그 이름으로 묻고
+    # 아무도 찾지 못한다. 실제로 네 개가 어긋나 있었다(adopted_at·spread_bp 등).
+    _deck = ROOT / "docs" / "agentization" / "build_deck.js"
+    if _deck.exists():
+        _js = _deck.read_text(encoding="utf-8")
+        _src = "".join(f.read_text(encoding="utf-8")
+                       for f in sorted((ROOT / "agents").glob("*.py")))
+        _src += (ROOT / "stock-monitor" / "ki_monitor.py").read_text(encoding="utf-8")
+        _noise = {"type", "text", "color", "fill", "line", "options",
+                  "fontsize", "valign", "align"}
+        _ghost = sorted(k for k in set(re.findall(r'"([a-z][a-z0-9_]{3,})":', _js))
+                        - _noise if k not in _src)
+        (ok if not _ghost else bad)(
+            f"덱의 필드명이 코드에 실재한다 ({_ghost or '전부 실재'})")
+
     # 임계는 한 곳에서만 정해져야 한다. 문서가 다른 숫자를 말하면 그 문서가 규칙이 된다.
     import replication as _R
     _tbad = []

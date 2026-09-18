@@ -187,7 +187,7 @@ OpenAlex · Crossref)에서 후보를 쌓고, `--adopt` 이 발행 정보를 Cro
 
 ```bash
 cd stock-monitor && python ki_monitor.py selftest   # 128개 (키·네트워크 불필요)
-python agents/selftest.py                           # 229개 (판단층)
+python agents/selftest.py                           # 232개 (판단층)
 python docs/audit.py                                # 저장소 전반
 ```
 

@@ -275,6 +275,11 @@ def validate(env: dict) -> list[str]:
         p.append("measure 는 소문자·숫자·밑줄로 된 3~40자 이름이어야 합니다 "
                  "(예: disposal_days)")
 
+    at_ = env.get("attempt")
+    if at_ is not None and not (isinstance(at_, int) and not isinstance(at_, bool)
+                                and at_ >= 1):
+        p.append("attempt 는 1 이상의 정수여야 합니다")
+
     ef = env.get("escalated_from")
     if ef is not None and ef not in TIERS:
         p.append(f"escalated_from 은 {TIERS} 중 하나여야 합니다")
@@ -337,6 +342,7 @@ def make(claim, *, desk, asof, source_grade, limits, value=None, unit=None,
         "desk": desk,
         "tier": tier,
         "escalated_from": None,
+        "attempt": 1,
         "spent": None,
         "reviewed_by": [],
         "instance": new_instance(desk, asof, subject or "na", salt),
@@ -519,6 +525,16 @@ def selftest() -> int:
         e["measure"] = None                     # 없어도 봉투는 성립한다
         _assert(validate(e) == [], validate(e))
     check("잰 대상에 이름을 붙일 수 있다 (교차검증의 열쇠)", _measure_name)
+
+    def _attempt():
+        e = _sample()
+        _assert(e["attempt"] == 1 and validate(e) == [])
+        e["attempt"] = 2
+        _assert(validate(e) == [])
+        for bad in (0, -1, "2", 1.5):
+            e["attempt"] = bad
+            _assert(any("attempt" in x for x in validate(e)), bad)
+    check("몇 번째 시도인지 적을 수 있다", _attempt)
 
     def _spent_shape():
         e = _sample()

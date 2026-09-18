@@ -70,7 +70,7 @@ cd stock-monitor
 python ki_monitor.py selftest        # 128개 — 측정층
 
 cd ..
-python agents/selftest.py            # 229개 — 판단층
+python agents/selftest.py            # 232개 — 판단층
 python docs/audit.py                 # 저장소 전반
 ```
 
@@ -313,6 +313,10 @@ python agents/run_day.py --stage escalate --envelopes agents/envelopes
 반려됐거나, 예산 안에서 못 끝냈거나, **판정이 갈린** 봉투를 한 급 위로
 올립니다. 갈린 경우는 **양쪽 다** 올립니다 — 한쪽만 올리면 그 선택 자체가
 판정이 됩니다.
+
+**첫 반려는 승격이 아닙니다.** 같은 급에서 한 번 더 하고, 두 번 연속 반려되면
+그때 올라갑니다 — 금지어 하나를 고치는 데 비싼 급을 띄우지 않기 위해서입니다.
+예산 미완과 판정 갈림은 다시 해도 같은 결과라 한 번에 올립니다.
 
 T3 위는 없습니다. 거기서 막힌 것은 자동으로 다시 돌리지 않고 사람에게
 넘깁니다(`stuck`).

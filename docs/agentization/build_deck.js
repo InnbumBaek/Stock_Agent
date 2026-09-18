@@ -314,7 +314,7 @@ function sLedger() {
     '      "question": "q2",',
     '',
     '      "state":   "adopted",   // unverified|adopted|warned|retired',
-    '      "adopted_at":  "2026-02-11",',
+    '      "state_at":    "2026-02-11",',
     '      "half_life_d": 180,',
     '      "recheck_due": "2026-11-05",',
     '',
@@ -323,7 +323,7 @@ function sLedger() {
     '          "universe": "KOSDAQ", "n": 1418,',
     '          "window":   "2023-01-02..2026-02-07",',
     '          "claim":    "비유동성 상위분위 초과수익 > 0",',
-    '          "observed": { "spread_bp": 41, "t": 3.42 } }',
+    '          "observed": { "spread_mean_bp": 41, "t": 3.42 } }',
     '      ],',
     '',
     '      "limits": [',
@@ -537,21 +537,23 @@ function sEscalation() {
   });
 
   panel(s, { x: 9.02, y: 1.86, w: 3.71, h: 2.72, fill: PANEL, line: AMB });
-  mono(s, "승격 조건", { x: 9.24, y: 2.0, w: 3.3, h: 0.26, fontSize: 11, bold: true, color: AMB });
-  ["두 데스크의 판정이 갈릴 때",
-   "리스크 검산이 원장 값과 불일치할 때",
-   "게이트에 두 번 연속 반려될 때",
-   "재현 판정이 '판정 불가' 로 나올 때",
-   "예산 초과로 T1·T2 가 미완일 때"].forEach((t, i) => {
-    s.addImage({ data: img("ar_am"), x: 9.24, y: 2.42 + i * 0.42, w: 0.24, h: 0.15 });
-    txt(s, t, { x: 9.56, y: 2.34 + i * 0.42, w: 3.0, h: 0.3, fontSize: 10, color: INK });
+  mono(s, "승격 조건  ·  ● 집행 중", { x: 9.24, y: 2.0, w: 3.3, h: 0.26, fontSize: 11, bold: true, color: AMB });
+  [["두 데스크의 판정이 갈릴 때", 1],
+   ["게이트에 두 번 연속 반려될 때", 1],
+   ["예산 초과로 미완일 때", 1],
+   ["리스크 검산 불일치 — 위 '갈림'이 덮는다", 0],
+   ["재현이 '판정 불가' — 사이클이 따로 돈다", 0]].forEach((t, i) => {
+    const y = 2.34 + i * 0.42;
+    s.addShape(pres.ShapeType.rect, { x: 9.24, y: y + 0.09, w: 0.14, h: 0.14,
+      fill: { color: t[1] ? GRN : PANEL2 }, line: t[1] ? { type: "none" } : { color: DIM, pt: 1 } });
+    txt(s, t[0], { x: 9.56, y, w: 3.0, h: 0.3, fontSize: 9.5, color: t[1] ? INK : DIM });
   });
 
   panel(s, { x: 9.02, y: 4.76, w: 3.71, h: 2.08, fill: PANEL3, line: EDGE });
   mono(s, "승격은 기록된다", { x: 9.24, y: 4.9, w: 3.3, h: 0.26, fontSize: 11, bold: true, color: GRN });
-  txt(s, "어떤 인스턴스가 왜 올라갔는지가 봉투에 남는다. 승격이 잦은 지점이 곧 이 시스템이 아직 약한 곳이므로, 그 분포를 스코어카드에서 본다.", {
+  txt(s, "첫 반려는 같은 급에서 다시 한다 — 금지어 하나에 T3 을 띄우지 않는다. 두 번 연속이면 그때 올라가고, 어느 인스턴스가 왜 올라갔는지가 봉투에 남는다. 승격이 잦은 지점이 이 시스템이 약한 곳이다.", {
     x: 9.24, y: 5.2, w: 3.3, h: 1.0, fontSize: 10, color: MUT });
-  mono(s, "escalated_from: \"T2\"\nescalation_reason: \"desk_conflict\"", {
+  mono(s, "escalated_from: \"T2\"\nescalated_because: \"desks_disagree\"", {
     x: 9.24, y: 6.2, w: 3.3, h: 0.5, fontSize: 8.5, color: CYN, lineSpacing: 12 });
 }
 
@@ -609,6 +611,7 @@ function sEnvelope() {
   mono(s, [
     '{',
     '  "claim":        "처분 소요일수 12.4 영업일",',
+    '  "measure":      "disposal_days",   "subject": "000660",',
     '  "value":        12.4,',
     '  "unit":         "business_days",',
     '  "asof":         "2026-09-11",  "stale_days": 2,',
@@ -623,28 +626,29 @@ function sEnvelope() {
     '      "verdict":  "재현됨",',
     '      "at":       "2026-02-11",',
     '      "universe": "KOSDAQ", "n": 1418,',
-    '      "observed": { "spread_bp": 41, "t": 3.42 }   // 임계 3.0',
+    '      "observed": { "spread_mean_bp": 41, "t": 3.42 }   // 임계 3.0',
     '    },',
     '    "assumes": { "participation": 0.15 }',
     '  },',
     '',
-    '  "read": [{"key": "000660.close", "value": 88.0,     // \u2190 v2',
-    '            "asof": "2026-09-11"}],',
+    '  "read": [{"key": "000660.close", "value": 88.0,',
+    '            "asof": "2026-09-11", "kind": "raw"}],   // \u2190 v2',
     '',
     '  "limits": ["논문 표본은 미국 상장주 — 코스닥 외삽 근거 아님"],',
     '',
     '  "desk": "q3-execution",',
     '  "instance": "q3-execution-20260911-000660-a91f",  // ← v2 신설',
-    '  "tier": "T2",  "escalated_from": null,',
+    '  "tier": "T2",  "attempt": 1,  "escalated_from": null,',
+    '  "spent": {"tool_calls": 11, "completed": true},   // \u2190 v2',
     '  "reviewed_by": ["risk", "compliance"]',
     '}',
   ].join("\n"), { x: M + 0.24, y: 1.96, w: 6.25, h: 4.42, fontSize: 7.4, color: "A9C8F0", lineSpacing: 9.2, valign: "top" });
 
   const f = [
-    ["read", "무엇을 읽고 이 값을 냈는가", "정정공시가 오면 원장의 같은 칸이 덮어써진다. 이것이 있어야 '틀렸다'와 '바뀌었다'가 갈린다.", GRN],
+    ["read · kind", "무엇을 읽고 냈는가 · 원본인가 파생인가", "정정이 오면 원장의 같은 칸이 덮어써진다. 파생값을 원본 칸과 대조하면 거짓 '바뀜'이 나온다.", GRN],
     ["paper_state", "그 논문이 어느 상태인가", "retired · 방향 반대는 반려. unverified 는 통과하되 '미검증' 표시가 함께 나간다.", CYN],
-    ["instance", "어느 인스턴스가 만들었는가", "이 ID 로 같은 실행을 다시 띄워 결과를 대조할 수 있다 — 재생 가능성의 열쇠.", PUR],
-    ["tier · escalated_from", "어느 급이 처리했고 왜 올라왔는가", "승격이 잦은 지점이 이 시스템이 약한 곳이다. 스코어카드가 이 분포를 본다.", AMB],
+    ["measure", "무엇을 잰 값인가", "데스크가 달라도 같은 것을 쟀으면 같은 이름이다. 이것이 없으면 대조 자체가 안 되고, '갈린 곳 없음'이 '안 봤다'가 된다.", PUR],
+    ["spent · attempt", "호출을 몇 번 썼고 끝냈는가", "토큰은 담지 않는다 — 에이전트가 신뢰성 있게 세지 못한다. 미완이면 사유를 요구한다.", AMB],
   ];
   f.forEach((x2, i) => {
     const y = 1.88 + i * 1.08;
@@ -697,7 +701,7 @@ function sScorecard() {
          "무엇이 얼마나 반려됐고 무엇이 재현에 실패했는지를 매주 본다. 프롬프트를 고치는 것은 사람이다.");
 
   panel(s, { x: M, y: 1.86, w: 6.3, h: 3.0, fill: PANEL, line: EDGE });
-  txt(s, "주간 데스크 스코어카드", { x: M + 0.24, y: 2.0, w: 4.0, h: 0.3, fontSize: 14, bold: true, color: INK });
+  txt(s, "주간 데스크 스코어카드  (예시 값)", { x: M + 0.24, y: 2.0, w: 4.6, h: 0.3, fontSize: 14, bold: true, color: INK });
   const sc = [
     ["q1-progress", 0.94, 0.06, GRN],
     ["q2-disposal", 0.81, 0.19, AMB],
@@ -714,13 +718,13 @@ function sScorecard() {
     pxBar(s, M + 2.5, y + 0.09, 2.6, 0.14, r[1], r[3]);
     mono(s, Math.round(r[2] * 100) + "%", { x: M + 5.3, y, w: 0.8, h: 0.3, fontSize: 9.5, bold: true, color: r[3], align: "right", valign: "middle" });
   });
-  txt(s, "q2-disposal 의 반려 19% 는 대부분 limits 누락이다 — 프롬프트가 아니라 스킬 문서를 고쳐야 한다는 신호다.", {
+  txt(s, "위 숫자는 모양이다. 실제 값은 발행 기록에서 나온다 — 아직 원장에 물려 돌린 적이 없어 실측이 아니다. 반려가 몰리는 곳은 프롬프트가 아니라 스킬 문서를 고쳐야 한다는 신호다.", {
     x: M + 0.24, y: 4.50, w: 5.85, h: 0.3, fontSize: 9, italic: true, color: AMB });
 
-  const metrics = [["재현 성공률", "82%", "이번 주 심사 통과분 기준", GRN],
-                   ["승격률 (T2→T3)", "4.1%", "데스크 간 이견이 주 원인", AMB],
-                   ["평균 stale_days", "1.3", "임계 3영업일 이내", CYN],
-                   ["은퇴 논문 누계", "6편", "재현 2회 연속 실패", MAG]];
+  const metrics = [["게이트 통과율", "n/N", "반려가 몰리는 관문도 함께", GRN],
+                   ["승격 분포", "T1→T2→T3", "집행 사유 셋의 분포만", AMB],
+                   ["예산 미완", "건수 · 호출", "토큰은 세지 않는다", CYN],
+                   ["표시 포화도", "0~1", "1.0 이면 그 표시는 배경", MAG]];
   metrics.forEach((m, i) => {
     const x = 7.1 + (i % 2) * 2.86, y = 1.86 + Math.floor(i / 2) * 1.54;
     panel(s, { x, y, w: 2.72, h: 1.42, fill: PANEL, line: EDGE });
@@ -806,7 +810,7 @@ function sRoadmap() {
     });
   });
 
-  const outs = [["코드로 끝난 것", "스키마 · 러너 · 관문 · 트리거 · 사이클 · 되짚기 — 자체 검사 229개", GRN],
+  const outs = [["코드로 끝난 것", "스키마 · 러너 · 관문 · 트리거 · 사이클 · 되짚기 — 자체 검사 232개", GRN],
                 ["원장이 있어야 되는 것", "12편 중 5편의 실제 재현 · 채택률 · 트리거 발생률 실측", AMB],
                 ["사람이 정할 것", "병행 2주 결과로 전환 여부 — 이 덱이 아니라 회의에서", MAG]];
   outs.forEach((o, i) => {
@@ -844,7 +848,7 @@ function sNext() {
   });
 
   mono(s, "성공 판정 지표", { x: 8.6, y: 1.62, w: 4.1, h: 0.28, fontSize: 12, bold: true, color: AMB, charSpacing: 1 });
-  const kpi = [["229개", "자체 검사", "키·네트워크·원장 없이 돈다", GRN],
+  const kpi = [["232개", "자체 검사", "키·네트워크·원장 없이 돈다", GRN],
                ["0줄", "ki_monitor.py 변경", "측정층은 손대지 않았다", CYN],
                ["8 / 12", "검정 대상 논문", "나머지 4편은 원래 대상 아님", AMB],
                ["0건", "미분류 논문", "전부 셋 중 하나로 분류됐다", MAG]];
@@ -886,7 +890,7 @@ function sExec() {
 
   const st = [["주 1회", "논문 사이클", "신규 + 재검 도래분"], ["N", "살아있는 논문", "고정값이 아니다"],
               ["7", "발행 게이트", "재현 관문 신설"], ["0", "원장 쓰기 권한", "에이전트는 못 쓴다"],
-              ["0줄", "ki_monitor.py 변경", "측정층은 그대로"], ["229개", "자체 검사", "키·망·원장 없이"]];
+              ["0줄", "ki_monitor.py 변경", "측정층은 그대로"], ["232개", "자체 검사", "키·망·원장 없이"]];
   st.forEach((t, i) => {
     const x = 8.72 + (i % 2) * 2.02, y = 1.82 + Math.floor(i / 2) * 1.42;
     panel(s, { x, y, w: 1.88, h: 1.3, fill: PANEL, line: EDGE });
@@ -1133,7 +1137,7 @@ function sStack() {
 
   panel(s, { x: M, y: 6.62, w: CW, h: 0.5, fill: PANEL3, line: EDGE });
   txt(s, [
-    { text: "실제로 들어간 것 — agents/ 파이썬 12개 · 데스크 정의 9 · 스킬 5 · 자체 검사 229개. ", options: { bold: true, color: GRN } },
+    { text: "실제로 들어간 것 — agents/ 파이썬 12개 · 데스크 정의 9 · 스킬 5 · 자체 검사 232개. ", options: { bold: true, color: GRN } },
     { text: "기존 코드 변경은 0줄이다. ki_monitor.py 는 열지 않았다.", options: { color: INK } },
   ], { x: M + 0.26, y: 6.62, w: CW - 0.52, h: 0.5, fontSize: 10.5, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
@@ -1248,8 +1252,8 @@ function sAppendix() {
     '├─ docs/                 audit.py 에 정의 대조 [10] 추가',
     '├─ RUN_ALL · SCHEDULE    월 07:40 주간 재현 한 줄 추가',
     '│',
-    '├─ agents/               ← 들어감 (자체 검사 229개)',
-    '│   ├─ envelope.py          봉투 스키마 · 검증기      26',
+    '├─ agents/               ← 들어감 (자체 검사 232개)',
+    '│   ├─ envelope.py          봉투 스키마 · 검증기      27',
     '│   ├─ papers.py            논문 장부 ki.papers/2    19',
     '│   ├─ replication.py       분위 러너 (달력 시간)    25',
     '│   ├─ eventstudy.py        이벤트 러너 (사건 시간)   16',
@@ -1258,7 +1262,7 @@ function sAppendix() {
     '│   ├─ selftest.py          다섯 개를 한 번에',
     '│   ├─ triggers.py          트리거 스캐너 · 소집      17',
     '│   ├─ cycle.py             주간 논문 사이클         13',
-    '│   ├─ run_day.py           소집 · 발행 · 승격        23',
+    '│   ├─ run_day.py           소집 · 발행 · 승격        25',
     '│   ├─ reconcile.py         데스크 간 대조            13',
     '│   ├─ scorecard.py         계측 (고치지는 않는다)    14',
     '│   └─ replay.py            되짚기 · 원장 대조         15',
@@ -1292,7 +1296,7 @@ function sAppendix() {
     txt(s, n[0], { x: 8.0, y: y + 0.12, w: 4.5, h: 0.3, fontSize: 12, bold: true, color: n[2] });
     txt(s, n[1], { x: 7.74, y: y + 0.44, w: 4.76, h: 0.56, fontSize: 9.5, color: MUT });
   });
-  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 12 · 데스크 정의 9 · 스킬 5 · 자체 검사 229개 · ki_monitor.py 변경 0줄");
+  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 12 · 데스크 정의 9 · 스킬 5 · 자체 검사 232개 · ki_monitor.py 변경 0줄");
 }
 
 

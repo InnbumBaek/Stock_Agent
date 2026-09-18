@@ -154,6 +154,22 @@ def publish(envelopes: list, ledger: dict, at: str = None) -> dict:
 
 ESCALATABLE = ("gate_rejected", "budget_incomplete", "desks_disagree")
 
+# 반려는 **두 번 연속**일 때만 올린다. 첫 반려는 같은 급에서 다시 한다.
+#
+# 금지어 하나를 고치는 데 T3 인스턴스를 띄우는 것은 낭비다. 게이트 반려는
+# 대개 그 급에서 고칠 수 있는 것이고(문장 삭제·한계 보강), 한 번에 올리면
+# 승격 분포가 "어디가 어려운가"가 아니라 "어디서 실수가 잦은가"가 된다.
+#
+# 나머지 둘은 한 번에 올린다.
+#   · 예산 미완 — 같은 급에서 다시 하면 같은 벽에 부딪힌다
+#   · 판정이 갈림 — 같은 데스크를 다시 돌려도 상대와의 차이는 그대로다
+RETRY_FIRST = ("gate_rejected",)
+
+
+def _subject_of(env: dict) -> str:
+    rd = env.get("read") or [{}]
+    return str(rd[0].get("key", env.get("subject") or "na")).split(".")[0]
+
 
 def escalate(published: dict, envelopes: list, at: str = None,
              rel_tol: float = RC.REL_TOL) -> dict:
@@ -181,7 +197,7 @@ def escalate(published: dict, envelopes: list, at: str = None,
             cands.append((c[side].get("instance"), "desks_disagree",
                           f"{c['kind']} — {c['why']}"))
 
-    seen = set()
+    seen, retries = set(), []
     for inst, why, detail in cands:
         if inst in seen:
             continue
@@ -190,9 +206,33 @@ def escalate(published: dict, envelopes: list, at: str = None,
         if env is None:
             continue
         tier = env.get("tier") or "T2"
+        attempt = env.get("attempt") or 1
+
+        # 첫 반려는 같은 급에서 다시 한다. 승격이 아니다.
+        if why in RETRY_FIRST and attempt < 2:
+            retries.append({
+                "instance": inst, "desk": env.get("desk"), "tier": tier,
+                "attempt": attempt + 1, "why": why, "detail": detail,
+                "note": ("첫 반려입니다. 같은 급에서 한 번 더 합니다 — 두 번 "
+                         "연속 반려되면 그때 올라갑니다."),
+            })
+            orders.append({
+                "instance": E.new_instance(env["desk"], at, _subject_of(env),
+                                           salt=f"retry:{inst}"),
+                "desk": env["desk"], "tier": tier, "attempt": attempt + 1,
+                "budget": dict(BUDGET[tier]),
+                "escalated_from": None, "escalated_because": None,
+                "trigger": {"kind": "retry", "subject": inst, "why": detail},
+                "inputs": dict(env.get("method", {}).get("assumes") or {}),
+                "tools": ["mcp__ki-ledger__*"],
+                "must": [f"반려 사유를 먼저 읽어라: {detail}",
+                         "같은 급에서 다시 낸다. 또 반려되면 위로 올라간다"],
+            })
+            continue
+
         nxt = E.NEXT_TIER.get(tier)
         row = {"instance": inst, "desk": env.get("desk"), "from": tier,
-               "why": why, "detail": detail}
+               "why": why, "detail": detail, "attempt": attempt}
         if nxt is None:
             # 더 올릴 급이 없다. 조용히 묻지 않고 사람에게 넘긴다.
             row["to"] = None
@@ -203,10 +243,10 @@ def escalate(published: dict, envelopes: list, at: str = None,
             continue
         row["to"] = nxt
         o = {
-            "instance": E.new_instance(env["desk"], at,
-                                       str(env.get("read", [{}])[0].get("key", "na")).split(".")[0],
+            "instance": E.new_instance(env["desk"], at, _subject_of(env),
                                        salt=f"esc:{inst}"),
-            "desk": env["desk"], "tier": nxt, "budget": dict(BUDGET[nxt]),
+            "desk": env["desk"], "tier": nxt, "attempt": 1,
+            "budget": dict(BUDGET[nxt]),
             "escalated_from": tier, "escalated_because": why,
             "trigger": {"kind": "escalation", "subject": inst, "why": detail},
             "inputs": dict(env.get("method", {}).get("assumes") or {}),
@@ -223,7 +263,7 @@ def escalate(published: dict, envelopes: list, at: str = None,
     return {
         "schema": SCHEMA, "stage": "escalate", "at": at,
         "n": len(orders), "orders": orders,
-        "escalated": reasons, "stuck": stuck,
+        "escalated": reasons, "retried": retries, "stuck": stuck,
         "reconcile": {k: rec[k] for k in
                       ("n_conflicts", "compared_pairs", "n_uncomparable",
                        "rel_tol", "blind_spot")},
@@ -389,19 +429,34 @@ def selftest() -> int:
         _assert(ra == rb)
     check("두 번 소집하면 같은 지시서가 나온다", _deterministic)
 
-    def _escalate_on_rejection():
-        """게이트에 반려되면 한 급 위로 올라가고, 왜 올라왔는지가 남는다."""
+    def _first_rejection_retries_same_tier():
+        """첫 반려는 같은 급에서 다시 한다 — 금지어 하나에 T3 을 띄우지 않는다."""
         bad = G._env(claim="희석 4.2% — 매도 검토")
         bad["tier"] = "T1"
         pub = publish([bad], led, at="2026-09-18")
         r = escalate(pub, [bad], at="2026-09-18")
-        _assert(r["n"] == 1, r)
+        _assert(r["escalated"] == [], r["escalated"])
+        _assert(len(r["retried"]) == 1, r)
+        o = r["orders"][0]
+        _assert(o["tier"] == "T1" and o["attempt"] == 2)
+        _assert(o["escalated_from"] is None)
+        _assert(o["budget"] == BUDGET["T1"])
+        _assert("두 번 연속" in r["retried"][0]["note"])
+    check("첫 반려는 같은 급에서 다시 한다 (승격이 아니다)",
+          _first_rejection_retries_same_tier)
+
+    def _second_rejection_escalates():
+        """두 번 연속 반려되면 그때 올라간다."""
+        bad = G._env(claim="희석 4.2% — 매도 검토")
+        bad["tier"], bad["attempt"] = "T1", 2
+        pub = publish([bad], led, at="2026-09-18")
+        r = escalate(pub, [bad], at="2026-09-18")
+        _assert(r["retried"] == [], r["retried"])
+        _assert(r["n"] == 1 and r["escalated"][0]["attempt"] == 2)
         o = r["orders"][0]
         _assert(o["tier"] == "T2" and o["escalated_from"] == "T1")
-        _assert(o["escalated_because"] == "gate_rejected")
-        _assert(o["budget"] == BUDGET["T2"])
-        _assert(r["escalated"][0]["detail"], "왜 막혔는지가 안 남았습니다")
-    check("반려되면 한 급 위로 올라간다", _escalate_on_rejection)
+        _assert(o["attempt"] == 1)          # 새 급에서는 다시 첫 시도다
+    check("두 번 연속 반려되면 올라간다", _second_rejection_escalates)
 
     def _escalate_on_incomplete():
         """예산 안에서 못 끝냈으면 올라간다 — 조용히 줄인 답을 통과시키지 않는다."""
@@ -414,12 +469,13 @@ def selftest() -> int:
         _assert(r["n"] == 1, r)                # 그래도 올라간다
         _assert(r["orders"][0]["escalated_because"] == "budget_incomplete")
         _assert(r["orders"][0]["tier"] == "T3")
-    check("미완이면 게이트를 통과했어도 올라간다", _escalate_on_incomplete)
+        _assert(r["retried"] == [], "미완은 같은 급에서 다시 하지 않는다")
+    check("미완이면 게이트를 통과했어도 바로 올라간다", _escalate_on_incomplete)
 
     def _t3_is_stuck_not_silent():
         """T3 위는 없다. 조용히 묻지 않고 사람에게 넘긴다."""
         bad = G._env(claim="매도 검토")
-        bad["tier"] = "T3"
+        bad["tier"], bad["attempt"] = "T3", 2
         pub = publish([bad], led, at="2026-09-18")
         r = escalate(pub, [bad], at="2026-09-18")
         _assert(r["n"] == 0 and len(r["stuck"]) == 1, r)
@@ -436,12 +492,21 @@ def selftest() -> int:
 
     def _escalation_not_doubled():
         """반려되고 미완이기도 하면 한 번만 올라간다."""
-        bad = G._env(claim="매도 검토"); bad["tier"] = "T1"
+        bad = G._env(claim="매도 검토"); bad["tier"] = "T1"; bad["attempt"] = 2
         bad["spent"] = E.spent(6, False, "예산 초과")
         pub = publish([bad], led, at="2026-09-18")
         r = escalate(pub, [bad], at="2026-09-18")
         _assert(r["n"] == 1, r["orders"])
     check("같은 인스턴스를 두 번 올리지 않는다", _escalation_not_doubled)
+
+    def _disagreement_does_not_retry():
+        """판정이 갈린 것은 같은 급에서 다시 해도 상대와의 차이가 그대로다."""
+        a = RC._env("q2-disposal", 25.0); b = RC._env("risk-officer", 41.0)
+        a["tier"] = b["tier"] = "T2"
+        r = escalate(publish([a, b], led, at="2026-09-18"), [a, b], at="2026-09-18")
+        _assert(r["retried"] == [], r["retried"])
+        _assert(r["n"] == 2)
+    check("판정이 갈리면 다시 하지 않고 바로 올린다", _disagreement_does_not_retry)
 
     def _only_enforceable_reasons():
         """집행할 수 없는 조건을 있는 척 세지 않는다."""
