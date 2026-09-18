@@ -65,6 +65,24 @@ _VERDICT_OK_PATH = ("method", "replication", "verdict")
 
 TIERS = ("T1", "T2", "T3")
 
+# 다음 급. T3 위는 없다 — 거기서 막히면 사람이 본다.
+NEXT_TIER = {"T1": "T2", "T2": "T3"}
+
+
+def spent(tool_calls: int, completed: bool, why: str = None) -> dict:
+    """인스턴스가 쓴 것. **호출 수만 센다.**
+
+    토큰은 세지 않는다. 에이전트는 자기가 몇 토큰을 썼는지 신뢰성 있게 모르고,
+    모르는 것을 적어 두면 스코어카드가 그 숫자를 근거처럼 읽는다. 호출 수는
+    자기가 한 것이라 셀 수 있다 (규칙 3 — 못 구한 값은 만들지 않는다).
+
+    `completed=False` 는 **미완이다.** 예산이 모자라 중간에 멈췄으면 조용히
+    줄인 답을 내지 말고 그렇게 적는다. 조용히 줄인 답이 가장 나쁜 실패다."""
+    o = {"tool_calls": int(tool_calls), "completed": bool(completed)}
+    if not completed:
+        o["why"] = why or "예산 안에서 끝내지 못했습니다"
+    return o
+
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _INSTANCE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{4}$")
 
@@ -227,6 +245,29 @@ def validate(env: dict) -> list[str]:
                 p.append("method.replication 은 dict 여야 합니다")
 
     # ── 누가 만들었는가 ──
+    sp = env.get("spent")
+    if sp is not None:
+        if not isinstance(sp, dict):
+            p.append("spent 는 dict 여야 합니다")
+        else:
+            n = sp.get("tool_calls")
+            if not (isinstance(n, int) and not isinstance(n, bool) and n >= 0):
+                p.append("spent.tool_calls 는 0 이상의 정수여야 합니다")
+            if not isinstance(sp.get("completed"), bool):
+                p.append("spent.completed 는 참/거짓이어야 합니다")
+            # 미완인데 사유가 없으면, 나중에 그 값이 왜 얕은지 알 수 없다.
+            if sp.get("completed") is False and not str(sp.get("why") or "").strip():
+                p.append("spent.completed 가 거짓이면 why 에 사유를 적어야 합니다")
+            if "tokens" in sp:
+                p.append("spent 에 tokens 를 적지 마십시오 — 신뢰성 있게 셀 수 "
+                         "없는 값입니다")
+
+    ef = env.get("escalated_from")
+    if ef is not None and ef not in TIERS:
+        p.append(f"escalated_from 은 {TIERS} 중 하나여야 합니다")
+    if ef is not None and ef == env.get("tier"):
+        p.append("escalated_from 이 tier 와 같습니다 — 승격이 아닙니다")
+
     inst = env.get("instance")
     if "instance" in env and not (isinstance(inst, str) and _INSTANCE.match(inst)):
         p.append("instance 형식이 아닙니다 (예: q2-disposal-20260911-000660-a91f)")
@@ -281,6 +322,7 @@ def make(claim, *, desk, asof, source_grade, limits, value=None, unit=None,
         "desk": desk,
         "tier": tier,
         "escalated_from": None,
+        "spent": None,
         "reviewed_by": [],
         "instance": new_instance(desk, asof, subject or "na", salt),
     }
@@ -450,6 +492,41 @@ def selftest() -> int:
         e["read"] = [observation("DART/재무", "000660.2026Q2.rev", None, "2026Q2")]
         _assert(validate(e) == [], validate(e))
     check("못 읽은 값도 None 으로 적는다", _read_none_value_ok)
+
+    def _spent_shape():
+        e = _sample()
+        e["spent"] = spent(7, True)
+        _assert(validate(e) == [], validate(e))
+        e["spent"] = {"tool_calls": "여섯", "completed": True}
+        _assert(any("tool_calls" in x for x in validate(e)))
+    check("쓴 호출 수를 적을 수 있다", _spent_shape)
+
+    def _incomplete_needs_why():
+        """미완이면 왜 미완인지 적어야 한다. 조용히 줄인 답이 가장 나쁘다."""
+        e = _sample()
+        e["spent"] = {"tool_calls": 18, "completed": False}
+        _assert(any("why" in x for x in validate(e)), validate(e))
+        e["spent"] = spent(18, False, "예산 18회를 다 써서 §6 을 못 봤습니다")
+        _assert(validate(e) == [], validate(e))
+        _assert(e["spent"]["why"])
+    check("미완이면 사유를 요구한다", _incomplete_needs_why)
+
+    def _tokens_refused():
+        """못 재는 것을 재는 척하지 않는다 (규칙 3)."""
+        e = _sample()
+        e["spent"] = {"tool_calls": 5, "completed": True, "tokens": 12000}
+        _assert(any("tokens" in x for x in validate(e)), validate(e))
+    check("토큰은 적지 못하게 막는다 (신뢰성 있게 셀 수 없다)", _tokens_refused)
+
+    def _escalated_from():
+        e = _sample()
+        e["tier"], e["escalated_from"] = "T3", "T2"
+        _assert(validate(e) == [], validate(e))
+        e["escalated_from"] = "T3"                  # 같은 급은 승격이 아니다
+        _assert(any("승격" in x for x in validate(e)))
+        e["escalated_from"] = "T9"
+        _assert(any("escalated_from" in x for x in validate(e)))
+    check("승격 기록이 성립하는지 검사한다", _escalated_from)
 
     def _asof_shape():
         e = _sample(); e["asof"] = "2026/09/11"

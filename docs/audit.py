@@ -392,6 +392,31 @@ else:
     (ok if not _badtool else bad)(
         f"데스크가 실재하는 MCP 도구만 부른다 ({_badtool or '전부 실재'})")
 
+    # agents/README.md 의 모듈별 개수. 총계만 세면 이 줄들이 조용히 낡는다 —
+    # 실제로 두 번 어긋났고, 두 번 다 손으로 고치다 빠뜨려서 생긴 일이다.
+    _rm = ROOT / "agents" / "README.md"
+    if _rm.exists() and n_ag:
+        _per = dict(re.findall(r"^(\w+)\s+(\d+) passed", ag.stdout, re.M))
+        _MOD = {"envelope": "envelope.py", "papers": "papers.py",
+                "replication": "replication.py", "eventstudy": "eventstudy.py",
+                "gates": "gates.py", "triggers": "triggers.py",
+                "mcp": "ki_ledger_mcp.py", "cycle": "cycle.py",
+                "run_day": "run_day.py", "scorecard": "scorecard.py",
+                "replay": "replay.py"}
+        _txt = _rm.read_text(encoding="utf-8")
+        _drift = []
+        for _k, _fn in _MOD.items():
+            _m = re.search(rf"^{re.escape(_fn)}\s+\S.*?\s+(\d+)$", _txt, re.M)
+            if _m is None:
+                _drift.append(f"{_fn}:줄없음")
+            elif _m.group(1) != _per.get(_k):
+                _drift.append(f"{_fn}:{_m.group(1)}≠{_per.get(_k)}")
+        _tot = re.search(r"합계\s+(\d+)", _txt)
+        if not _tot or int(_tot.group(1)) != n_ag:
+            _drift.append(f"합계:{_tot.group(1) if _tot else '없음'}≠{n_ag}")
+        (ok if not _drift else bad)(
+            f"agents/README.md 모듈별 개수 ({_drift or '일치'})")
+
     # 임계는 한 곳에서만 정해져야 한다. 문서가 다른 숫자를 말하면 그 문서가 규칙이 된다.
     import replication as _R
     _tbad = []

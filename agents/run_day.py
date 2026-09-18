@@ -137,6 +137,87 @@ def publish(envelopes: list, ledger: dict, at: str = None) -> dict:
     }
 
 
+# ── 승격 ──────────────────────────────────────────────────────────────
+#
+# 덱이 적은 승격 조건 다섯 중 **지금 집행할 수 있는 둘**만 여기서 본다.
+#
+#   ○ 게이트에 반려됐다            publish 결과가 안다
+#   ○ 예산 안에서 끝내지 못했다     봉투의 spent.completed 가 안다
+#   ✕ 두 데스크의 판정이 갈릴 때    데스크 간 대조가 아직 없다 (ic-chair 의 일)
+#   ✕ 리스크 검산 불일치           risk-officer 가 봉투를 내야 안다
+#   ✕ 재현이 '판정 불가'           quant-method 쪽 사이클이 따로 돈다
+#
+# 없는 조건을 있는 척 세지 않는다. 스코어카드가 세는 승격 분포는 이 둘의
+# 분포이고, 그 사실이 산출에 적혀 나간다.
+
+ESCALATABLE = ("gate_rejected", "budget_incomplete")
+
+
+def escalate(published: dict, envelopes: list, at: str = None) -> dict:
+    """반려·미완을 한 급 위로 올린다. 올라간 이유가 기록된다.
+
+    T3 위는 없다. 거기서 막힌 것은 승격이 아니라 **사람이 볼 일**이다."""
+    at = at or date.today().isoformat()
+    by_inst = {e.get("instance"): e for e in envelopes}
+    orders, stuck, reasons = [], [], []
+
+    cands = []
+    for r in published.get("rejected") or []:
+        cands.append((r.get("instance"), "gate_rejected", r.get("reason")))
+    for e in envelopes:
+        sp = e.get("spent") or {}
+        if sp.get("completed") is False:
+            cands.append((e.get("instance"), "budget_incomplete",
+                          sp.get("why") or "예산 안에서 끝내지 못했습니다"))
+
+    seen = set()
+    for inst, why, detail in cands:
+        if inst in seen:
+            continue
+        seen.add(inst)
+        env = by_inst.get(inst)
+        if env is None:
+            continue
+        tier = env.get("tier") or "T2"
+        nxt = E.NEXT_TIER.get(tier)
+        row = {"instance": inst, "desk": env.get("desk"), "from": tier,
+               "why": why, "detail": detail}
+        if nxt is None:
+            # 더 올릴 급이 없다. 조용히 묻지 않고 사람에게 넘긴다.
+            row["to"] = None
+            row["note"] = ("T3 위는 없습니다. 자동으로 다시 돌리지 않고 "
+                           "사람이 봅니다 — 반복해서 막히는 지점이 이 시스템이 "
+                           "약한 곳입니다.")
+            stuck.append(row)
+            continue
+        row["to"] = nxt
+        o = {
+            "instance": E.new_instance(env["desk"], at,
+                                       str(env.get("read", [{}])[0].get("key", "na")).split(".")[0],
+                                       salt=f"esc:{inst}"),
+            "desk": env["desk"], "tier": nxt, "budget": dict(BUDGET[nxt]),
+            "escalated_from": tier, "escalated_because": why,
+            "trigger": {"kind": "escalation", "subject": inst, "why": detail},
+            "inputs": dict(env.get("method", {}).get("assumes") or {}),
+            "tools": ["mcp__ki-ledger__*"],
+            "must": [
+                f"{tier} 에서 막힌 이유를 먼저 읽어라: {detail}",
+                "봉투에 escalated_from 을 적어라 — 왜 올라왔는지가 남아야 한다",
+                "같은 이유로 또 막히면 그것은 프롬프트가 아니라 규칙 문서의 문제다",
+            ],
+        }
+        orders.append(o)
+        reasons.append(row)
+
+    return {
+        "schema": SCHEMA, "stage": "escalate", "at": at,
+        "n": len(orders), "orders": orders,
+        "escalated": reasons, "stuck": stuck,
+        "note": ("승격은 기록된다. 승격이 잦은 지점이 이 시스템이 약한 곳이고, "
+                 "스코어카드가 그 분포를 본다 — 고치는 것은 사람이다."),
+    }
+
+
 def load_envelopes(d: Path) -> list:
     out = []
     for f in sorted(d.glob("*.json")):
@@ -294,6 +375,65 @@ def selftest() -> int:
         _assert(ra == rb)
     check("두 번 소집하면 같은 지시서가 나온다", _deterministic)
 
+    def _escalate_on_rejection():
+        """게이트에 반려되면 한 급 위로 올라가고, 왜 올라왔는지가 남는다."""
+        bad = G._env(claim="희석 4.2% — 매도 검토")
+        bad["tier"] = "T1"
+        pub = publish([bad], led, at="2026-09-18")
+        r = escalate(pub, [bad], at="2026-09-18")
+        _assert(r["n"] == 1, r)
+        o = r["orders"][0]
+        _assert(o["tier"] == "T2" and o["escalated_from"] == "T1")
+        _assert(o["escalated_because"] == "gate_rejected")
+        _assert(o["budget"] == BUDGET["T2"])
+        _assert(r["escalated"][0]["detail"], "왜 막혔는지가 안 남았습니다")
+    check("반려되면 한 급 위로 올라간다", _escalate_on_rejection)
+
+    def _escalate_on_incomplete():
+        """예산 안에서 못 끝냈으면 올라간다 — 조용히 줄인 답을 통과시키지 않는다."""
+        e = G._env()
+        e["tier"] = "T2"
+        e["spent"] = E.spent(18, False, "예산 18회를 다 써서 §6 을 못 봤습니다")
+        pub = publish([e], led, at="2026-09-18")
+        _assert(pub["n_passed"] == 1)          # 게이트는 통과했다
+        r = escalate(pub, [e], at="2026-09-18")
+        _assert(r["n"] == 1, r)                # 그래도 올라간다
+        _assert(r["orders"][0]["escalated_because"] == "budget_incomplete")
+        _assert(r["orders"][0]["tier"] == "T3")
+    check("미완이면 게이트를 통과했어도 올라간다", _escalate_on_incomplete)
+
+    def _t3_is_stuck_not_silent():
+        """T3 위는 없다. 조용히 묻지 않고 사람에게 넘긴다."""
+        bad = G._env(claim="매도 검토")
+        bad["tier"] = "T3"
+        pub = publish([bad], led, at="2026-09-18")
+        r = escalate(pub, [bad], at="2026-09-18")
+        _assert(r["n"] == 0 and len(r["stuck"]) == 1, r)
+        _assert(r["stuck"][0]["to"] is None)
+        _assert("사람이 봅니다" in r["stuck"][0]["note"])
+    check("T3 에서 막히면 사람에게 넘긴다 (조용히 묻지 않는다)", _t3_is_stuck_not_silent)
+
+    def _no_escalation_when_clean():
+        e = G._env(); e["spent"] = E.spent(6, True)
+        pub = publish([e], led, at="2026-09-18")
+        r = escalate(pub, [e], at="2026-09-18")
+        _assert(r["n"] == 0 and r["stuck"] == [])
+    check("멀쩡히 통과하면 올라가지 않는다", _no_escalation_when_clean)
+
+    def _escalation_not_doubled():
+        """반려되고 미완이기도 하면 한 번만 올라간다."""
+        bad = G._env(claim="매도 검토"); bad["tier"] = "T1"
+        bad["spent"] = E.spent(6, False, "예산 초과")
+        pub = publish([bad], led, at="2026-09-18")
+        r = escalate(pub, [bad], at="2026-09-18")
+        _assert(r["n"] == 1, r["orders"])
+    check("같은 인스턴스를 두 번 올리지 않는다", _escalation_not_doubled)
+
+    def _only_enforceable_reasons():
+        """집행할 수 없는 조건을 있는 척 세지 않는다."""
+        _assert(set(ESCALATABLE) == {"gate_rejected", "budget_incomplete"})
+    check("집행 가능한 승격 사유만 쓴다", _only_enforceable_reasons)
+
     def _tiers_all_budgeted():
         _assert(set(BUDGET) == {"T1", "T2", "T3"})
         _assert(set(BUDGET) == set(E.TIERS))
@@ -311,7 +451,7 @@ def selftest() -> int:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser(description="하루 운영 — 소집 · 발행")
     ap.add_argument("--selftest", action="store_true")
-    ap.add_argument("--stage", choices=["convene", "publish"])
+    ap.add_argument("--stage", choices=["convene", "publish", "escalate"])
     ap.add_argument("--since")
     ap.add_argument("--at")
     ap.add_argument("--db")
@@ -339,6 +479,8 @@ if __name__ == "__main__":
         if not d.exists():
             print(f"봉투 폴더가 없습니다: {d}", file=sys.stderr)
             sys.exit(1)
-        out = publish(load_envelopes(d), led, at=a.at)
+        envs = load_envelopes(d)
+        pub = publish(envs, led, at=a.at)
+        out = pub if a.stage == "publish" else escalate(pub, envs, at=a.at)
     print(json.dumps(out, ensure_ascii=False, indent=a.indent))
     sys.exit(1 if out.get("halt_publication") else 0)

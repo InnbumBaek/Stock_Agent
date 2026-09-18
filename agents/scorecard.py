@@ -48,6 +48,8 @@ def tally(runs: list) -> dict:
     escalated = Counter()
     halted = 0
     n_in = n_pass = n_rej = 0
+    incomplete = 0
+    calls = []
     days = []
 
     for r in runs:
@@ -57,13 +59,16 @@ def tally(runs: list) -> dict:
         n_in += int(r.get("n_in") or 0)
         n_pass += int(r.get("n_passed") or 0)
         n_rej += int(r.get("n_rejected") or 0)
-        for m in r.get("marks") or []:
-            marks[m] += 1
         for row in (r.get("publishable") or []) + (r.get("rejected") or []):
             d = row.get("desk") or "unknown"
             s = per_desk.setdefault(d, {"passed": 0, "rejected": 0, "gates": Counter()})
             ok = not row.get("reason")
             s["passed" if ok else "rejected"] += 1
+            # 표시는 **봉투마다** 센다. 발행 단위 목록은 중복이 제거돼 있어서
+            # 그것을 세면 "몇 건에 붙었는가"가 아니라 "며칠에 나왔는가"가 된다.
+            if ok:
+                for m in row.get("marks") or []:
+                    marks[m] += 1
             for g in row.get("gates") or []:
                 if not g.get("ok"):
                     label = f"{g.get('gate')} {g.get('name')}"
@@ -74,6 +79,11 @@ def tally(runs: list) -> dict:
                 tiers[env["tier"]] += 1
             if env.get("escalated_from"):
                 escalated[f"{env['escalated_from']}→{env.get('tier')}"] += 1
+            sp = env.get("spent") or {}
+            if sp.get("completed") is False:
+                incomplete += 1
+            if isinstance(sp.get("tool_calls"), int):
+                calls.append(sp["tool_calls"])
 
     desks = []
     for d, s in sorted(per_desk.items()):
@@ -84,6 +94,22 @@ def tally(runs: list) -> dict:
             "top_gate": (s["gates"].most_common(1)[0][0] if s["gates"] else None),
         })
 
+    # 표시 포화도 — 모든 문장에 붙는 표시는 정보가 아니다.
+    #
+    # 실제로 그렇게 됐다. 12편이 전부 unverified 라 모든 봉투가 '미검증' 을
+    # 달고 나갔다. 그러면 읽는 사람이 그 표시를 배경으로 읽기 시작하고, 정작
+    # 한 편만 미검증인 날에도 눈에 띄지 않는다.
+    #
+    # 임계를 걸어 경고하지 않는다 — 그건 처방이다. 포화도를 재서 낸다.
+    sat = []
+    for m, n in marks.most_common():
+        share = _pct(n, n_pass)
+        row = {"mark": m, "n": n, "share": share}
+        if share is not None and share >= 1.0:
+            row["note"] = ("발행된 모든 문장에 붙었습니다. 모든 것에 붙는 표시는 "
+                           "구분하지 못하므로, 읽는 사람에게는 배경입니다.")
+        sat.append(row)
+
     return {
         "schema": SCHEMA, "ok": True,
         "n_runs": len(runs),
@@ -93,9 +119,20 @@ def tally(runs: list) -> dict:
         "halted_days": halted,
         "desks": desks,
         "gate_failures": [{"gate": g, "n": c} for g, c in gate_fail.most_common()],
-        "marks": [{"mark": m, "n": c} for m, c in marks.most_common()],
+        "marks": sat,
         "tiers": dict(tiers),
         "escalations": [{"path": k, "n": v} for k, v in escalated.most_common()],
+        "escalation_note": ("집행할 수 있는 승격 사유는 둘뿐입니다 — 게이트 반려와 "
+                            "예산 미완. 데스크 간 판정이 갈리는 경우는 아직 세지 "
+                            "않습니다."),
+        # 호출 수만 센다. 토큰은 신뢰성 있게 셀 수 없어 봉투가 담지 않는다.
+        "spent": {
+            "incomplete": incomplete,
+            "incomplete_share": _pct(incomplete, n_in),
+            "tool_calls_median": (sorted(calls)[len(calls) // 2] if calls else None),
+            "reported": len(calls),
+            "note": "호출 수만 셉니다 — 토큰은 에이전트가 신뢰성 있게 세지 못합니다",
+        },
         "note": ("계측이지 처방이 아니다. 반려가 몰리는 게이트는 그 게이트가 "
                  "요구하는 것을 스킬 문서가 가르치지 않는다는 뜻이고, 고치는 "
                  "것은 사람이다."),
@@ -135,7 +172,7 @@ def load_runs(d: Path) -> list:
 # ── 자체 검사 ─────────────────────────────────────────────────────────
 
 def _run(at, rows, halt=False, marks=()):
-    """rows: (desk, 통과여부, 실패게이트, tier)"""
+    """rows: (desk, 통과여부, 실패게이트, tier). marks 는 통과한 봉투마다 붙는다."""
     pub, rej = [], []
     for desk, ok, gate, tier in rows:
         gates = [{"gate": "①", "name": "판정 어휘", "ok": True}]
@@ -212,6 +249,45 @@ def selftest() -> int:
         _assert(r["marks"][0]["n"] == 1)
         _assert("미검증" in r["marks"][0]["mark"])
     check("값에 붙은 표시를 센다", _marks)
+
+    def _mark_saturation():
+        """모든 문장에 붙은 표시를 그렇다고 말한다.
+
+        실제로 그렇게 됐다 — 12편이 전부 unverified 라 모든 봉투가 '미검증' 을
+        달고 나갔다. 그러면 그 표시는 배경이 된다."""
+        M = "미검증 — 우리 표본으로 재현해 본 적 없음"
+        r = tally([_run("2026-09-18", [("q2-disposal", True, None, "T2"),
+                                       ("q1-progress", True, None, "T2")], marks=[M])])
+        _assert(r["marks"][0]["share"] == 1.0, r["marks"])
+        _assert("배경" in r["marks"][0]["note"])
+        # 일부에만 붙으면 경고하지 않는다 — 그때는 표시가 구분을 한다.
+        run = _run("2026-09-18", [("q2-disposal", True, None, "T2"),
+                                  ("q1-progress", True, None, "T2")], marks=[M])
+        run["publishable"][1]["marks"] = []      # 둘 중 하나만 미검증
+        r2 = tally([run])
+        _assert(r2["marks"][0]["share"] == 0.5, r2["marks"])
+        _assert("note" not in r2["marks"][0], r2["marks"])
+    check("모든 문장에 붙은 표시를 그렇다고 말한다", _mark_saturation)
+
+    def _spent_counted():
+        """미완과 호출 수를 센다. 토큰은 세지 않는다."""
+        run = _run("2026-09-18", [("q2-disposal", True, None, "T2")])
+        run["publishable"][0]["envelope"] = {"tier": "T2",
+            "spent": {"tool_calls": 18, "completed": False, "why": "예산 초과"}}
+        r = tally([run])
+        _assert(r["spent"]["incomplete"] == 1)
+        _assert(r["spent"]["tool_calls_median"] == 18)
+        _assert("토큰" in r["spent"]["note"])
+        _assert("tokens" not in json.dumps(r["spent"]))
+    check("미완과 호출 수를 세고 토큰은 세지 않는다", _spent_counted)
+
+    def _escalation_counted():
+        run = _run("2026-09-18", [("q2-disposal", True, None, "T3")])
+        run["publishable"][0]["envelope"] = {"tier": "T3", "escalated_from": "T2"}
+        r = tally([run])
+        _assert(r["escalations"] == [{"path": "T2→T3", "n": 1}], r["escalations"])
+        _assert("둘뿐" in r["escalation_note"])
+    check("승격 분포를 센다 (이제 실제로 채워지는 칸이다)", _escalation_counted)
 
     def _tiers():
         r = tally([_run("2026-09-11", [("q1-progress", True, None, "T1"),
