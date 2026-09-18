@@ -102,6 +102,23 @@ def _monthly_panel(con: sqlite3.Connection, market: str,
     return df
 
 
+def _index_returns(con: sqlite3.Connection, market: str,
+                   start: str, end: str) -> pd.Series:
+    """지수 일간 수익률. 없으면 빈 것을 낸다 — 0 으로 대신하지 않는다."""
+    try:
+        idx = pd.read_sql_query(
+            "SELECT date, close FROM index_daily WHERE index_name = ? "
+            "AND date BETWEEN ? AND ? ORDER BY date",
+            con, params=(market, start, end))
+    except Exception:                                     # noqa: BLE001
+        return pd.Series(dtype=float)
+    if idx.empty:
+        return pd.Series(dtype=float)
+    s = pd.Series(idx["close"].to_numpy(dtype=float),
+                  index=pd.to_datetime(idx["date"]))
+    return s.pct_change().dropna()
+
+
 def _factor_amihud(g: pd.DataFrame) -> float:
     """Amihud 비유동성 — |일수익률| / 일거래대금."""
     c = g["close"].to_numpy(dtype=float)
@@ -114,6 +131,32 @@ def _factor_amihud(g: pd.DataFrame) -> float:
     if ok.sum() < 10:
         return float("nan")
     return float(np.mean(r[ok] / v[ok]) * 1e6)
+
+
+def _factor_ivol(g: pd.DataFrame, mkt: pd.Series) -> float:
+    """고유변동성 — 그 달의 **일간** 수익률을 시장에 회귀하고 남은 잔차의 표준편차.
+
+    논문은 Fama-French 3요인 잔차를 쓴다. 우리 원장에는 SMB·HML 이 없어서
+    시장 하나로만 회귀한다(시장모형). 규모·가치 노출이 잔차에 남으므로 **같은
+    양이 아니다** — 그 사실이 `limits` 에 적혀 나간다.
+
+    월간 종가로 대용하지 않는 이유는 그것이 아예 다른 측정이기 때문이다. 일간을
+    쓰면 빈도는 논문과 같고, 남는 차이는 요인 수 하나다."""
+    c = g["close"].to_numpy(dtype=float)
+    if c.size < 15:
+        return float("nan")
+    r = pd.Series(np.diff(c) / c[:-1], index=g["date"].to_numpy()[1:])
+    m = mkt.reindex(r.index)
+    ok = np.isfinite(r.to_numpy()) & np.isfinite(m.to_numpy())
+    if ok.sum() < 12:
+        return float("nan")
+    y, x = r.to_numpy()[ok], m.to_numpy()[ok]
+    vx = x.var()
+    if not np.isfinite(vx) or vx <= 0:
+        return float("nan")
+    beta = float(np.cov(y, x, ddof=1)[0, 1] / vx)
+    resid = y - (y.mean() - beta * x.mean()) - beta * x
+    return float(resid.std(ddof=2)) if resid.size > 2 else float("nan")
 
 
 def _factor_turnover(g: pd.DataFrame) -> float:
@@ -185,6 +228,15 @@ CLAIMS: dict[str, dict] = {
                    "과대평가된다",
                    "논문 표본은 미국 상장주다. 코스닥에서 성립한다는 근거가 아니다"],
     },
+    "ahxz2006": {
+        "factor": "ivol", "sign": -1,
+        "claim": "고유변동성이 높은 종목일수록 이후 수익률이 낮다",
+        "limits": ["논문은 Fama-French 3요인 잔차를 쓴다 — 우리 원장에는 SMB·HML 이 "
+                   "없어 시장 하나로만 회귀했다. 규모·가치 노출이 잔차에 남는다",
+                   "논문 표본은 미국 상장주다. 코스닥에서 성립한다는 근거가 아니다",
+                   "거래정지로 수익률이 0 으로 이어지는 구간을 제외하지 않았다 — "
+                   "그 구간은 변동성을 실제보다 낮게 만든다"],
+    },
     "j1990": {
         "factor": "rev_1m", "sign": -1,
         "claim": "직전 1개월 수익률이 낮았던 종목이 이후 수익률이 높다 (단기 반전)",
@@ -192,7 +244,7 @@ CLAIMS: dict[str, dict] = {
     },
 }
 
-_FACTOR_KIND = {"amihud": "cross", "turnover": "cross",
+_FACTOR_KIND = {"amihud": "cross", "turnover": "cross", "ivol": "cross_mkt",
                 "mom_12_1": "hist", "rev_1m": "hist", "high52": "hist"}
 
 # ── 재현 대상이 아닌 것 ───────────────────────────────────────────────
@@ -222,11 +274,9 @@ NOT_A_FACTOR = {
 # 이벤트 시간으로 재는 것. 이 러너가 아니라 `agents/eventstudy.py` 가 돌린다.
 EVENT_TIME = ("ritter1991", "fh2001")
 
-NEEDS_RUNNER = {
-    "ahxz2006": "고유변동성은 **일간** 잔차 변동성으로 재야 한다(논문은 FF3 잔차). "
-                "이 러너의 패널은 월말 종가라 같은 것을 재지 못한다. 월간으로 "
-                "대용하면 다른 측정에 논문 이름을 붙이는 셈이다.",
-}
+# 환원은 되는데 아직 돌릴 러너가 없는 것. 지금은 비어 있다 — 새 논문이 들어와
+# 여기 걸리면, '대상 아님'과 섞이지 않도록 사유를 적어 넣는다.
+NEEDS_RUNNER: dict[str, str] = {}
 
 
 def reducibility(key: str) -> tuple[str, str | None]:
@@ -305,7 +355,17 @@ def run(con: sqlite3.Connection, key: str, market: str = "KOSDAQ",
     fwd = px.shift(-1) / px - 1.0                       # 다음 달 수익률
 
     kind = _FACTOR_KIND[spec["factor"]]
-    if kind == "cross":
+    if kind == "cross_mkt":
+        mkt = _index_returns(con, market, start, end)
+        if mkt.empty:
+            out["reason"] = (f"{market} 지수가 원장에 없습니다 — 잔차를 만들 "
+                             f"기준선이 없습니다")
+            return out
+        fn = {"ivol": _factor_ivol}[spec["factor"]]
+        sig = (df.groupby(["ym", "code"])
+                 .apply(lambda g: fn(g, mkt), include_groups=False)
+                 .unstack("code").reindex(index=px.index, columns=px.columns))
+    elif kind == "cross":
         fn = {"amihud": _factor_amihud, "turnover": _factor_turnover}[spec["factor"]]
         sig = (df.groupby(["ym", "code"]).apply(fn, include_groups=False)
                  .unstack("code").reindex(index=px.index, columns=px.columns))
@@ -363,7 +423,7 @@ def run(con: sqlite3.Connection, key: str, market: str = "KOSDAQ",
 # ── 자체 검사 ─────────────────────────────────────────────────────────
 
 def _synthetic(effect: float = 0.0, months: int = 72, names: int = 200,
-               seed: int = 7) -> sqlite3.Connection:
+               seed: int = 7, ivol_spread: float = 0.0) -> sqlite3.Connection:
     """합성 원장. 키도 네트워크도 쓰지 않는다.
 
     effect 는 '팩터 상위 분위가 다음 달에 더 버는 정도'다. 0 이면 아무 효과가
@@ -372,6 +432,8 @@ def _synthetic(effect: float = 0.0, months: int = 72, names: int = 200,
     con = sqlite3.connect(":memory:")
     con.execute("CREATE TABLE price_daily (date TEXT, code TEXT, market TEXT, "
                 "close REAL, volume REAL, value REAL, PRIMARY KEY (date, code))")
+    con.execute("CREATE TABLE index_daily (date TEXT, index_name TEXT, "
+                "close REAL, PRIMARY KEY (date, index_name))")
     codes = [f"{i:06d}" for i in range(1, names + 1)]
     # 종목마다 고정된 비유동성 수준을 준다 — 분위가 달마다 뒤집히지 않도록.
     level = rng.uniform(0.5, 2.0, size=names)
@@ -381,10 +443,15 @@ def _synthetic(effect: float = 0.0, months: int = 72, names: int = 200,
     # effect 는 '월간' 알파다. 극단 분위가 달마다 effect/2 만큼 더/덜 번다.
     drift = effect * rank / 21.0
     px = np.full(names, 10000.0)
-    rows = []
+    mkt = 1000.0
+    rows, irows = [], []
     days = pd.bdate_range("2019-01-01", periods=months * 21)
     for d in days:
-        r = rng.normal(0.0, 0.02, size=names) + drift
+        # 공통 요인 하나와 종목 고유 잡음. ivol 은 그 고유 잡음의 크기다.
+        mr = rng.normal(0.0002, 0.008)
+        mkt *= (1.0 + mr)
+        idio = rng.normal(0.0, 0.02, size=names) * (1.0 + ivol_spread * rank)
+        r = mr + idio + drift
         px = np.maximum(px * (1.0 + r), 100.0)
         vol = rng.lognormal(10.0, 0.5, size=names)
         # 거래대금이 작을수록 Amihud 가 크다 — level 이 높은 종목을 작게 준다.
@@ -395,9 +462,11 @@ def _synthetic(effect: float = 0.0, months: int = 72, names: int = 200,
         # 러너가 주어진 순위를 제대로 읽는가이지 그 되먹임이 아니다.
         val = 1.0e4 * vol / level
         ds = d.strftime("%Y-%m-%d")
+        irows.append((ds, "KOSDAQ", float(mkt)))
         rows += [(ds, codes[i], "KOSDAQ", float(px[i]), float(vol[i]), float(val[i]))
                  for i in range(names)]
     con.executemany("INSERT INTO price_daily VALUES (?,?,?,?,?,?)", rows)
+    con.executemany("INSERT INTO index_daily VALUES (?,?,?)", irows)
     con.commit()
     return con
 
@@ -608,6 +677,47 @@ def selftest() -> int:
         _assert(r["verdict"] in (VERDICT_OK, VERDICT_OPPOSITE, VERDICT_NONE))
         _assert(r["observed"] is not None, r)
     check("52주 신고가 근접도가 계산되고 대용을 밝힌다", _high52_proxy)
+
+    def _ivol_daily():
+        """고유변동성이 높은 쪽이 덜 번다는 세계에서 잡아내는가.
+
+        rank 가 높을수록 고유 잡음이 크고(ivol 큼) 동시에 drift 가 낮도록
+        만든다 — 논문이 말하는 방향(ivol ↑ → 수익 ↓)이다."""
+        con = _synthetic(effect=-0.03, ivol_spread=0.9, seed=5)
+        r = run(con, "ahxz2006", at="2026-09-18")
+        con.close()
+        _assert(r["observed"] is not None, r)
+        _assert(r["verdict"] == VERDICT_OK, r)
+        _assert(r["observed"]["t"] < -T_MIN, r["observed"])
+    check("일간 잔차 변동성을 재고 방향을 잡는다", _ivol_daily)
+
+    def _ivol_needs_index():
+        """기준선이 없으면 잔차를 만들 수 없다 — 0 으로 대신하지 않는다."""
+        con = _synthetic(effect=-0.03, ivol_spread=0.9, seed=5)
+        con.execute("DELETE FROM index_daily")
+        r = run(con, "ahxz2006", at="2026-09-18")
+        con.close()
+        _assert(r["verdict"] == VERDICT_NONE)
+        _assert("기준선" in (r["reason"] or ""), r["reason"])
+    check("지수가 없으면 고유변동성을 재지 않는다", _ivol_needs_index)
+
+    def _ivol_is_daily_not_monthly():
+        """월간 대용이 아니라 일간으로 재는가.
+
+        월말 종가 12개로는 한 달 안의 잔차 변동성을 만들 수 없다. 일간을 쓰는
+        것이 이 팩터를 논문과 같은 빈도로 만드는 유일한 방법이다."""
+        _assert(_FACTOR_KIND["ivol"] == "cross_mkt")
+        _assert("일간" in CLAIMS["ahxz2006"]["claim"] or
+                "일간" in _factor_ivol.__doc__)
+        _assert(any("3요인" in x for x in CLAIMS["ahxz2006"]["limits"]))
+    check("고유변동성은 일간으로 재고 요인 차이를 밝힌다", _ivol_is_daily_not_monthly)
+
+    def _needs_runner_is_empty():
+        """지금은 러너가 없는 논문이 없다. 목록은 남겨 둔다 — 새 논문이 들어와
+        여기 걸리면 '대상 아님'과 섞이지 않게 사유를 적어야 한다."""
+        _assert(NEEDS_RUNNER == {})
+        _assert(reducibility("ahxz2006")[0] == "testable")
+    check("러너가 없는 논문이 없다", _needs_runner_is_empty)
 
     def _claims_have_limits():
         """모든 주장은 '그 논문이 주장하지 않는 것'을 달고 있어야 한다 (규칙 4)."""

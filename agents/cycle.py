@@ -270,13 +270,17 @@ def selftest() -> int:
         _assert(P.state_of(after, "ritter1991") == P.ADOPTED)
     check("이벤트 논문은 이벤트 러너로 돌아간다", _event_time_uses_its_runner)
 
-    def _three_buckets_are_distinct():
-        """대상 아님 · 러너 미비 · 미분류가 각각 제 칸으로 간다.
+    def _buckets_route_correctly():
+        """분류마다 제 칸으로 간다.
 
         한 칸에 몰아넣으면 '원래 대상이 아닌 것'과 '우리가 아직 못 한 것'이
-        구분되지 않고, 사이클이 얼마나 밀렸는지를 잴 수 없게 된다."""
+        구분되지 않고, 사이클이 얼마나 밀렸는지를 잴 수 없게 된다.
+
+        `needs_runner` 는 지금 비어 있다. 비었다고 검사를 지우면, 다음에 그
+        칸을 쓰게 됐을 때 경로가 살아 있는지 아무도 모른다 — 가짜 항목을 잠깐
+        넣어 경로만 확인한다."""
         keys = {"roll1984": "not_a_factor",      # 추정량
-                "ahxz2006": "needs_runner",      # 일간 잔차 — 러너가 없다
+                "없는논문2099": "unclassified",   # 분류되지 않았다
                 "amihud2002": "rechecked"}       # 지금 돌아간다
         led = P.migrate({"schema": "ki.papers/1", "papers": {
             k: {"authors": "A", "year": 2000, "title": "T", "journal": "J",
@@ -288,9 +292,24 @@ def selftest() -> int:
             got = [x["paper"] for x in out[bucket]]
             _assert(k in got, f"{k} 가 {bucket} 에 없습니다: {out}")
         _assert(out["not_a_factor"][0]["why"])
-        _assert(out["needs_runner"][0]["why"])
-    check("대상 아님 · 러너 미비 · 미분류가 각각 제 칸으로 간다",
-          _three_buckets_are_distinct)
+        _assert(out["unclassified"][0]["why"])
+
+        # 러너 미비 경로 — 비어 있어도 살아 있는지 본다
+        R.NEEDS_RUNNER["가짜논문"] = "이 러너로는 못 잰다 — 경로 확인용 임시 항목이다"
+        try:
+            led2 = P.migrate({"schema": "ki.papers/1", "papers": {
+                "가짜논문": {"authors": "A", "year": 2000, "title": "T",
+                          "journal": "J", "question": "q1", "adopted": True}}},
+                at="2026-01-01")
+            con2 = R._synthetic(effect=0.03, seed=5)
+            out2, after2 = run(con2, led2, today="2026-09-11")
+            con2.close()
+            _assert([x["paper"] for x in out2["needs_runner"]] == ["가짜논문"], out2)
+            _assert(after2["papers"]["가짜논문"]["replication"] == [])
+        finally:
+            R.NEEDS_RUNNER.pop("가짜논문", None)
+        check("분류마다 제 칸으로 간다 (빈 칸의 경로도 확인한다)",
+          _buckets_route_correctly)
 
     def _retired_not_revisited():
         led = _led(n=2)
