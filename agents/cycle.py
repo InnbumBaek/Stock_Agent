@@ -32,6 +32,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import papers as P                                       # noqa: E402
+import eventstudy as ES                                  # noqa: E402
 import replication as R                                  # noqa: E402
 import triggers as T                                     # noqa: E402
 
@@ -87,7 +88,7 @@ def run(con, ledger: dict, today: str = None, cap: int = RECHECK_CAP,
 
     for key in picks:
         kind, why = R.reducibility(key)
-        if kind != "testable":
+        if kind not in ("testable", "event_time"):
             # 돌리지 않는다. 상태도 건드리지 않는다 — 못 돌린 것과 돌려서
             # 실패한 것은 다르고, 셋은 서로도 다르다.
             #
@@ -96,13 +97,16 @@ def run(con, ledger: dict, today: str = None, cap: int = RECHECK_CAP,
             #   unclassified  재현 대상인지조차 정해지지 않았다 (사람의 숙제)
             out[kind].append({"paper": key, "why": why})
             continue
+        # 어느 러너로 돌릴지는 분류가 정한다. 분위 정렬로 잴 수 없는 주장을
+        # 분위 러너에 넣으면 '판정 불가'가 나오고, 그것이 표본 부족처럼 읽힌다.
+        runner = R.run if kind == "testable" else ES.run
         try:
-            rep = R.run(con, key, market, at=today)
+            rep = runner(con, key, market, at=today)
         except Exception as e:                            # noqa: BLE001
             out["errors"].append({"paper": key,
                                   "error": f"{type(e).__name__}: {e}"})
             continue
-        entry = {"paper": key, "verdict": rep["verdict"],
+        entry = {"paper": key, "runner": kind, "verdict": rep["verdict"],
                  "t": (rep.get("observed") or {}).get("t"),
                  "window": rep.get("window"), "n": rep.get("n"),
                  "reason": rep.get("reason")}
@@ -247,13 +251,32 @@ def selftest() -> int:
         _assert(P.state_of(after, "없는주장2099") == "unverified")
     check("미분류 논문은 건너뛰고 상태를 건드리지 않는다", _unclassified_skipped)
 
+    def _event_time_uses_its_runner():
+        """이벤트 논문은 이벤트 러너로 간다 — 분위 러너에 넣지 않는다.
+
+        분위 러너에 넣으면 '판정 불가'가 나오고, 그것이 표본 부족처럼 읽힌다.
+        실제로는 애초에 다른 방법으로 재야 하는 주장이다."""
+        led = P.migrate({"schema": "ki.papers/1", "papers": {
+            "ritter1991": {"authors": "A", "year": 1991, "title": "T",
+                           "journal": "J", "question": "q4", "adopted": True}}},
+            at="2026-01-01")
+        con = ES._synth(effect=-0.02, seed=5)
+        out, after = run(con, led, today="2026-09-18")
+        con.close()
+        _assert(out["rechecked"], out)
+        e = out["rechecked"][0]
+        _assert(e["runner"] == "event_time", e)
+        _assert(e["verdict"] == R.VERDICT_OK, e)
+        _assert(P.state_of(after, "ritter1991") == P.ADOPTED)
+    check("이벤트 논문은 이벤트 러너로 돌아간다", _event_time_uses_its_runner)
+
     def _three_buckets_are_distinct():
         """대상 아님 · 러너 미비 · 미분류가 각각 제 칸으로 간다.
 
         한 칸에 몰아넣으면 '원래 대상이 아닌 것'과 '우리가 아직 못 한 것'이
         구분되지 않고, 사이클이 얼마나 밀렸는지를 잴 수 없게 된다."""
         keys = {"roll1984": "not_a_factor",      # 추정량
-                "ritter1991": "needs_runner",    # 이벤트 시간
+                "ahxz2006": "needs_runner",      # 일간 잔차 — 러너가 없다
                 "amihud2002": "rechecked"}       # 지금 돌아간다
         led = P.migrate({"schema": "ki.papers/1", "papers": {
             k: {"authors": "A", "year": 2000, "title": "T", "journal": "J",

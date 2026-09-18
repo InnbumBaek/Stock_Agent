@@ -67,11 +67,18 @@ pip install pandas numpy scipy requests lxml
 
 ```bash
 cd stock-monitor
-python ki_monitor.py selftest        # 128개 통과해야 정상
+python ki_monitor.py selftest        # 128개 — 측정층
 
+cd ..
+python agents/selftest.py            # 190개 — 판단층
+python docs/audit.py                 # 저장소 전반
 ```
 
-둘 다 통과하면 코드는 정상입니다. 여기서 실패하면 아래로 진행하지 마십시오.
+셋 다 통과하면 코드는 정상입니다. 여기서 실패하면 아래로 진행하지 마십시오.
+
+세 가지가 보는 것이 다릅니다. `selftest` 는 **재는 코드**가 성립하는지,
+`agents/selftest.py` 는 **읽는 층과 그 관문**이, `docs/audit.py` 는 테스트가
+못 보는 것(줄바꿈·배치 파일·키 유출·문서와 코드의 어긋남)을 봅니다.
 
 ---
 
@@ -212,6 +219,83 @@ python ki_monitor.py report --market KOSDAQ
 여기까지가 **통합 이전 원본과 완전히 같은 동작**입니다. 이 리포트가 제대로
 나오는지 먼저 확인하십시오 — 나중에 문제가 생겼을 때 이 단계가 되는지만 보면
 원인이 원장 쪽인지 계산 쪽인지 즉시 갈립니다.
+
+---
+
+## 6. 판단층 — 원장을 읽어 문장으로 만든다
+
+여기부터는 `agents/` 입니다. 측정층은 **재기만** 하고, 이 층이 그것을 읽어
+문장으로 만든 뒤 **그 문장이 나가도 되는지 검사**합니다. `ki_monitor.py` 는
+한 줄도 건드리지 않습니다.
+
+### 논문이 우리 표본에서 성립하는가
+
+```bash
+python agents/papers.py --show          # 12편의 상태 · 인용 가능 여부
+python agents/cycle.py --dry-run        # 이번 주에 무엇이 도는지만
+python agents/cycle.py --run            # 돌리고 장부에 쌓는다
+```
+
+`cycle.py` 는 **월요일 07:40** 에 자동으로 돕니다(`SCHEDULE.cmd` 가 등록).
+재검 기한이 온 논문을 원장에 대고 다시 계산하고, 기한이 지난 채택본을
+`warned` 로 내립니다. **주 3편 상한**이 있어 기한이 몰린 주에도 세 편만
+돕니다 — 상한이 없으면 그 주의 재현이 전부 대충 돌아갑니다.
+
+네트워크도 키도 쓰지 않습니다. 이미 받아 둔 원장만 읽습니다.
+
+논문 하나만 따로 돌려 볼 수도 있습니다.
+
+```bash
+python agents/replication.py --paper amihud2002     # 달력 시간 분위 정렬
+python agents/eventstudy.py  --paper ritter1991     # 사건 시간
+```
+
+통과 임계는 **|t| ≥ 3.0** 입니다. 2.0 이 아닌 이유는 `agents/README.md` 에
+있습니다 — 요약하면, 주 1회 사이클이면 연 150회쯤 검정하게 되고 그때 2.0 은
+효과 없는 팩터를 해마다 7~8개 통과시킵니다.
+
+### 오늘 누가 불려 나오는가
+
+```bash
+python agents/run_day.py --stage convene --since 2026-09-17
+```
+
+원장의 변화가 데스크를 부릅니다 — 새 공시, 종가 ±8% 변동, 보호예수 해제
+D-30, 거시 갱신, 재검 기한. **트리거가 없으면 아무도 소집되지 않습니다.**
+조용한 날은 조용한 것이 정상입니다.
+
+내는 것은 작업지시서입니다. 누구를, 어떤 입력으로, 어떤 예산 안에서 부를
+것인가까지이고 판단은 들어 있지 않습니다.
+
+### 나가도 되는 문장인가
+
+```bash
+python agents/gates.py --check 봉투.json
+python agents/run_day.py --stage publish --envelopes agents/envelopes
+```
+
+일곱 관문을 전부 돌립니다. **통과 아니면 반려**이고, 반려된 절은 회의자료에
+빈칸이 아니라 '반려됨 — 사유'로 남습니다. 키·인증 URL 이 문장에 남아 있으면
+그 절이 아니라 **발행 전체**를 멈춥니다.
+
+### 그때 왜 그렇게 읽었는가
+
+```bash
+python agents/replay.py --envelope 봉투.json
+```
+
+봉투가 적어 둔 것과 지금 원장을 대조합니다. 정정공시가 오면 원장의 같은 칸이
+덮어써지므로, 이것이 있어야 **"에이전트가 틀렸다"와 "데이터가 바뀌었다"**를
+구분할 수 있습니다.
+
+### 어디가 약한가
+
+```bash
+python agents/scorecard.py --runs agents/out/publish
+```
+
+반려가 몰리는 게이트와 데스크를 셉니다. **계측이지 처방이 아닙니다** —
+고치는 것은 사람입니다.
 
 ---
 

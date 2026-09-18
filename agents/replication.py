@@ -219,12 +219,10 @@ NOT_A_FACTOR = {
                 "형태이고, 그 형태는 분위 정렬로 검정되지 않는다.",
 }
 
+# 이벤트 시간으로 재는 것. 이 러너가 아니라 `agents/eventstudy.py` 가 돌린다.
+EVENT_TIME = ("ritter1991", "fh2001")
+
 NEEDS_RUNNER = {
-    "ritter1991": "IPO 장기 수익률은 **이벤트 시간**(상장일 기준 3~5년 보유)으로 "
-                  "재야 한다. 이 러너는 달력 시간 분위 정렬만 한다 — 이벤트 "
-                  "시간 러너가 따로 필요하다.",
-    "fh2001": "보호예수 해제 전후의 **이벤트 스터디**다. 같은 이유로 이 러너의 "
-              "대상이 아니다.",
     "ahxz2006": "고유변동성은 **일간** 잔차 변동성으로 재야 한다(논문은 FF3 잔차). "
                 "이 러너의 패널은 월말 종가라 같은 것을 재지 못한다. 월간으로 "
                 "대용하면 다른 측정에 논문 이름을 붙이는 셈이다.",
@@ -232,9 +230,14 @@ NEEDS_RUNNER = {
 
 
 def reducibility(key: str) -> tuple[str, str | None]:
-    """이 논문을 이 러너로 검정할 수 있는가. (분류, 사유) 를 낸다."""
+    """이 논문을 어떤 러너로 검정하는가. (분류, 사유) 를 낸다.
+
+    `testable` 은 이 파일의 분위 러너, `event_time` 은 `eventstudy.py` 다.
+    둘을 한 칸에 넣으면 사이클이 어느 러너를 불러야 하는지 알 수 없다."""
     if key in CLAIMS:
         return "testable", None
+    if key in EVENT_TIME:
+        return "event_time", None
     if key in NOT_A_FACTOR:
         return "not_a_factor", NOT_A_FACTOR[key]
     if key in NEEDS_RUNNER:
@@ -577,13 +580,24 @@ def selftest() -> int:
     check("장부의 모든 논문이 분류돼 있다", _reducibility_covers_the_ledger)
 
     def _buckets_are_disjoint():
-        _assert(not (set(CLAIMS) & set(NOT_A_FACTOR)))
-        _assert(not (set(CLAIMS) & set(NEEDS_RUNNER)))
-        _assert(not (set(NOT_A_FACTOR) & set(NEEDS_RUNNER)))
+        sets = [set(CLAIMS), set(EVENT_TIME), set(NOT_A_FACTOR), set(NEEDS_RUNNER)]
+        for i, a in enumerate(sets):
+            for b in sets[i + 1:]:
+                _assert(not (a & b), a & b)
         for d in (NOT_A_FACTOR, NEEDS_RUNNER):
             for k, why in d.items():
                 _assert(why.strip() and len(why) > 30, k)   # 사유 없이 빼지 않는다
-    check("세 분류가 겹치지 않고 사유가 있다", _buckets_are_disjoint)
+    check("네 분류가 겹치지 않고 사유가 있다", _buckets_are_disjoint)
+
+    def _event_time_has_a_runner():
+        """event_time 으로 분류한 논문은 실제로 돌릴 러너가 있어야 한다.
+
+        분류만 바꿔 놓고 러너가 없으면, '대상 아님'을 '곧 할 것'으로 이름만
+        바꾼 셈이 된다."""
+        import eventstudy as ES
+        for k in EVENT_TIME:
+            _assert(k in ES.EVENT_CLAIMS, f"{k} 를 돌릴 러너가 없습니다")
+    check("event_time 논문은 돌릴 러너가 있다", _event_time_has_a_runner)
 
     def _high52_proxy():
         """대용한 것은 대용했다고 적혀 있어야 한다."""
