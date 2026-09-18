@@ -84,6 +84,8 @@ def spent(tool_calls: int, completed: bool, why: str = None) -> dict:
     return o
 
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+# 무엇을 잰 값인가 — 데스크가 달라도 같은 것을 쟀으면 같은 이름이어야 한다.
+_MEASURE = re.compile(r"^[a-z][a-z0-9_]{2,39}$")
 _INSTANCE = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*-[0-9a-f]{4}$")
 
 
@@ -262,6 +264,17 @@ def validate(env: dict) -> list[str]:
                 p.append("spent 에 tokens 를 적지 마십시오 — 신뢰성 있게 셀 수 "
                          "없는 값입니다")
 
+    # ── 무엇을 잰 값인가 (교차검증의 열쇠) ──
+    #
+    # 데스크는 서로의 산출을 보지 않는다. 격리가 교차검증의 전제이기 때문이다.
+    # 그런데 **아무도 대조하지 않으면 격리가 사 주는 것이 없다** — 서로 무관한
+    # 문장이 나올 뿐이다. 두 데스크가 같은 것을 쟀는지 알려면 잰 대상에 이름이
+    # 있어야 한다.
+    mz = env.get("measure")
+    if mz is not None and not (isinstance(mz, str) and _MEASURE.match(mz)):
+        p.append("measure 는 소문자·숫자·밑줄로 된 3~40자 이름이어야 합니다 "
+                 "(예: disposal_days)")
+
     ef = env.get("escalated_from")
     if ef is not None and ef not in TIERS:
         p.append(f"escalated_from 은 {TIERS} 중 하나여야 합니다")
@@ -304,11 +317,13 @@ def promote(env: dict, to: str) -> tuple[bool, str]:
 
 def make(claim, *, desk, asof, source_grade, limits, value=None, unit=None,
          sources=None, method=None, reason=None, subject="", tier="T2",
-         stale_days=None, salt="", read=None) -> dict:
+         stale_days=None, salt="", read=None, measure=None) -> dict:
     """봉투를 짓는다. 지어낸 값을 채워 넣지 않는다 — 빠진 것은 빠진 채로 둔다."""
     env = {
         "schema": SCHEMA,
         "claim": claim,
+        "measure": measure,
+        "subject": subject or None,
         "value": value,
         "unit": unit,
         "asof": asof,
@@ -338,6 +353,7 @@ def _sample() -> dict:
         source_grade="해석", sources=["KRX/일별매매정보"], subject="000660",
         method={"paper": "amihud2002", "paper_state": "unverified",
                 "assumes": {"participation": 0.15}},
+        measure="disposal_days",
         read=[observation("KRX/일별매매정보", "000660.close", 88.0, "2026-09-11"),
               observation("KRX/일별매매정보", "000660.adv60", 1.0e8, "2026-09-11",
                           kind=DERIVED,
@@ -492,6 +508,17 @@ def selftest() -> int:
         e["read"] = [observation("DART/재무", "000660.2026Q2.rev", None, "2026Q2")]
         _assert(validate(e) == [], validate(e))
     check("못 읽은 값도 None 으로 적는다", _read_none_value_ok)
+
+    def _measure_name():
+        e = _sample()
+        _assert(e["measure"] == "disposal_days" and e["subject"] == "000660")
+        _assert(validate(e) == [], validate(e))
+        for bad in ("Disposal", "ab", "처분일수", "x" * 41, 7):
+            e["measure"] = bad
+            _assert(any("measure" in x for x in validate(e)), bad)
+        e["measure"] = None                     # 없어도 봉투는 성립한다
+        _assert(validate(e) == [], validate(e))
+    check("잰 대상에 이름을 붙일 수 있다 (교차검증의 열쇠)", _measure_name)
 
     def _spent_shape():
         e = _sample()

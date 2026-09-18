@@ -401,8 +401,8 @@ else:
                 "replication": "replication.py", "eventstudy": "eventstudy.py",
                 "gates": "gates.py", "triggers": "triggers.py",
                 "mcp": "ki_ledger_mcp.py", "cycle": "cycle.py",
-                "run_day": "run_day.py", "scorecard": "scorecard.py",
-                "replay": "replay.py"}
+                "reconcile": "reconcile.py", "run_day": "run_day.py",
+                "scorecard": "scorecard.py", "replay": "replay.py"}
         _txt = _rm.read_text(encoding="utf-8")
         _drift = []
         for _k, _fn in _MOD.items():

@@ -40,6 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import envelope as E                                     # noqa: E402
 import gates as G                                        # noqa: E402
 import papers as P                                       # noqa: E402
+import reconcile as RC                                   # noqa: E402
 import triggers as T                                     # noqa: E402
 
 SCHEMA = "ki.day/1"
@@ -143,17 +144,19 @@ def publish(envelopes: list, ledger: dict, at: str = None) -> dict:
 #
 #   ○ 게이트에 반려됐다            publish 결과가 안다
 #   ○ 예산 안에서 끝내지 못했다     봉투의 spent.completed 가 안다
-#   ✕ 두 데스크의 판정이 갈릴 때    데스크 간 대조가 아직 없다 (ic-chair 의 일)
-#   ✕ 리스크 검산 불일치           risk-officer 가 봉투를 내야 안다
+#   ○ 두 데스크의 판정이 갈렸다     reconcile 이 기계적으로 찾는다
+#   ✕ 리스크 검산 불일치           risk-officer 가 봉투를 내야 안다 — 다만
+#                                  그 봉투가 오면 위의 '갈렸다'로 잡힌다
 #   ✕ 재현이 '판정 불가'           quant-method 쪽 사이클이 따로 돈다
 #
-# 없는 조건을 있는 척 세지 않는다. 스코어카드가 세는 승격 분포는 이 둘의
+# 없는 조건을 있는 척 세지 않는다. 스코어카드가 세는 승격 분포는 위 셋의
 # 분포이고, 그 사실이 산출에 적혀 나간다.
 
-ESCALATABLE = ("gate_rejected", "budget_incomplete")
+ESCALATABLE = ("gate_rejected", "budget_incomplete", "desks_disagree")
 
 
-def escalate(published: dict, envelopes: list, at: str = None) -> dict:
+def escalate(published: dict, envelopes: list, at: str = None,
+             rel_tol: float = RC.REL_TOL) -> dict:
     """반려·미완을 한 급 위로 올린다. 올라간 이유가 기록된다.
 
     T3 위는 없다. 거기서 막힌 것은 승격이 아니라 **사람이 볼 일**이다."""
@@ -169,6 +172,14 @@ def escalate(published: dict, envelopes: list, at: str = None) -> dict:
         if sp.get("completed") is False:
             cands.append((e.get("instance"), "budget_incomplete",
                           sp.get("why") or "예산 안에서 끝내지 못했습니다"))
+
+    # 갈린 쪽은 **양쪽 다** 올린다. 어느 쪽이 틀렸는지 모르기 때문이다 —
+    # 한쪽만 올리면 그 선택 자체가 판정이 된다.
+    rec = RC.review(envelopes, rel_tol)
+    for c in rec["conflicts"]:
+        for side in ("left", "right"):
+            cands.append((c[side].get("instance"), "desks_disagree",
+                          f"{c['kind']} — {c['why']}"))
 
     seen = set()
     for inst, why, detail in cands:
@@ -213,6 +224,9 @@ def escalate(published: dict, envelopes: list, at: str = None) -> dict:
         "schema": SCHEMA, "stage": "escalate", "at": at,
         "n": len(orders), "orders": orders,
         "escalated": reasons, "stuck": stuck,
+        "reconcile": {k: rec[k] for k in
+                      ("n_conflicts", "compared_pairs", "n_uncomparable",
+                       "rel_tol", "blind_spot")},
         "note": ("승격은 기록된다. 승격이 잦은 지점이 이 시스템이 약한 곳이고, "
                  "스코어카드가 그 분포를 본다 — 고치는 것은 사람이다."),
     }
@@ -431,8 +445,39 @@ def selftest() -> int:
 
     def _only_enforceable_reasons():
         """집행할 수 없는 조건을 있는 척 세지 않는다."""
-        _assert(set(ESCALATABLE) == {"gate_rejected", "budget_incomplete"})
+        _assert(set(ESCALATABLE) == {"gate_rejected", "budget_incomplete",
+                                     "desks_disagree"})
     check("집행 가능한 승격 사유만 쓴다", _only_enforceable_reasons)
+
+    def _disagreement_escalates_both():
+        """갈리면 양쪽 다 올린다 — 한쪽만 올리면 그 선택이 판정이 된다."""
+        a = RC._env("q2-disposal", 25.0); b = RC._env("risk-officer", 41.0)
+        a["tier"] = b["tier"] = "T2"
+        pub = publish([a, b], led, at="2026-09-18")
+        r = escalate(pub, [a, b], at="2026-09-18")
+        got = {x["desk"]: x for x in r["escalated"]}
+        _assert(set(got) == {"q2-disposal", "risk-officer"}, r["escalated"])
+        _assert(all(x["why"] == "desks_disagree" for x in got.values()))
+        _assert(all(x["to"] == "T3" for x in got.values()))
+        _assert(r["reconcile"]["n_conflicts"] >= 1)
+    check("판정이 갈리면 양쪽 다 올린다", _disagreement_escalates_both)
+
+    def _agreement_does_not_escalate():
+        a = RC._env("q2-disposal", 25.0); b = RC._env("risk-officer", 25.4)
+        pub = publish([a, b], led, at="2026-09-18")
+        r = escalate(pub, [a, b], at="2026-09-18")
+        _assert(r["n"] == 0, r["escalated"])
+        _assert(r["reconcile"]["compared_pairs"] == 1)   # 비교는 했다
+    check("값이 가까우면 올리지 않는다 (다만 비교는 한다)", _agreement_does_not_escalate)
+
+    def _reconcile_summary_travels():
+        """대조를 몇 건 했고 몇 건은 못 했는지가 산출에 남는다."""
+        a = RC._env("q2-disposal", 25.0); a["measure"] = None
+        pub = publish([a], led, at="2026-09-18")
+        r = escalate(pub, [a], at="2026-09-18")
+        _assert(r["reconcile"]["n_uncomparable"] == 1, r["reconcile"])
+        _assert(r["reconcile"]["blind_spot"])
+    check("대조하지 못한 건수가 승격 산출에 함께 나온다", _reconcile_summary_travels)
 
     def _tiers_all_budgeted():
         _assert(set(BUDGET) == {"T1", "T2", "T3"})
