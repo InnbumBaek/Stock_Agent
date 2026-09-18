@@ -195,10 +195,19 @@ def scan_paper_rechecks(paper_ledger: dict, today: str,
     소집된다. 그러면 그 주의 재현은 전부 대충 돌아간다."""
     if not paper_ledger:
         return []
+    # 어떤 러너로도 검정할 수 없는 논문은 부르지 않는다. 추정량·모형은 분위로
+    # 정렬해 초과수익을 볼 물건이 아니라서, 소집해 봐야 계량역이 "이건 그런
+    # 물건이 아닙니다"를 매주 다시 쓰게 된다. 영원히 반복되는 빈 소집이다.
+    try:
+        import replication as _R                 # noqa: PLC0415
+        never = set(_R.NOT_A_FACTOR)
+    except Exception:                            # noqa: BLE001
+        never = set()
+
     due = []
     for k, p in (paper_ledger.get("papers") or {}).items():
-        if p.get("state") == "retired":
-            continue                            # 은퇴본은 다시 보지 않는다
+        if p.get("state") == "retired" or k in never:
+            continue                            # 은퇴본·대상 아님은 부르지 않는다
         d = p.get("recheck_due")
         if d is None or d <= today:
             due.append((d or "", k, p))
@@ -410,6 +419,26 @@ def selftest() -> int:
         got = [x["subject"] for x in r["triggers"] if x["kind"] == "paper.recheck"]
         _assert(got == ["old", "new"], got)
     check("기한이 오래 지난 논문부터 재검한다", _paper_recheck_order)
+
+    def _not_a_factor_not_convened():
+        """어떤 러너로도 못 재는 논문은 소집하지 않는다.
+
+        통합 실행에서 실제로 나왔다 — quant-method 가 ac2000(최적 집행 모형)을
+        재검하러 불려 나왔다. 그 논문은 앞으로도 분위 검정 대상이 아니므로
+        매주 같은 빈 소집이 반복된다."""
+        import replication as _R
+        never = sorted(_R.NOT_A_FACTOR)
+        _assert(never, "대상 아님 목록이 비었습니다")
+        led = {"papers": {k: {"state": "unverified", "recheck_due": None,
+                              "question": "q2"} for k in never}}
+        led["papers"]["amihud2002"] = {"state": "unverified",
+                                       "recheck_due": None, "question": "q2"}
+        con = _ledger()
+        r = scan(con, today="2026-09-11", paper_ledger=led)
+        con.close()
+        got = [t["subject"] for t in r["triggers"] if t["kind"] == "paper.recheck"]
+        _assert(got == ["amihud2002"], got)
+    check("검정할 수 없는 논문은 소집하지 않는다", _not_a_factor_not_convened)
 
     def _retired_not_rechecked():
         led = {"papers": {"dead": {"state": "retired", "recheck_due": "2020-01-01",

@@ -92,6 +92,11 @@ OpenAlex · Crossref)에서 후보를 쌓고, `--adopt` 이 발행 정보를 Cro
 못 읽은 값도 `null` 로 적는다. 빼 버리면 "안 읽었다"와 "읽었는데 없더라"가
 구분되지 않는다.
 
+**원본(`raw`)과 파생(`derived`)을 구분한다.** 60일 평균 거래대금을 원장의
+'거래대금' 칸과 대조하면 아무것도 안 바뀌었는데 "데이터가 바뀜"이 나온다.
+거짓 '바뀜' 은 거짓 '일치' 만큼 나쁘다 — 회의에 자료가 움직였다고 알린다.
+계산한 값은 `kind:"derived"` 로 적고 `basis` 에 계산 방법을 남긴다.
+
 ### 5. 대외비·자격증명을 저장소에 넣지 마라
 
 `ki.sqlite` · `watchlist.csv` · `exit_plan.csv` · `positions.csv` · `out/` ·
@@ -164,7 +169,7 @@ OpenAlex · Crossref)에서 후보를 쌓고, `--adopt` 이 발행 정보를 Cro
 
 ```bash
 cd stock-monitor && python ki_monitor.py selftest   # 128개 (키·네트워크 불필요)
-python agents/selftest.py                           # 193개 (판단층)
+python agents/selftest.py                           # 199개 (판단층)
 python docs/audit.py                                # 저장소 전반
 ```
 

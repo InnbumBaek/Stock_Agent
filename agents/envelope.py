@@ -81,7 +81,12 @@ def new_instance(desk: str, at: str, subject: str, salt: str = "") -> str:
     return f"{slug.strip('-')}-{tail}"
 
 
-def observation(source: str, key: str, value, asof: str) -> dict:
+RAW = "raw"            # 원장의 칸 하나. 되짚기가 그대로 대조한다
+DERIVED = "derived"    # 데스크가 계산한 값. 대조하려면 다시 계산해야 한다
+
+
+def observation(source: str, key: str, value, asof: str,
+                kind: str = RAW, basis: str = None) -> dict:
     """관측 한 줄 — **그때 원장에 무엇이 적혀 있었는가.**
 
     이것이 재생 가능성의 전부다. 원장은 `INSERT OR REPLACE` 로 덮어써진다 —
@@ -91,8 +96,22 @@ def observation(source: str, key: str, value, asof: str) -> dict:
 
     원장을 양방향 시간 장부로 바꾸는 것은 큰 공사다. 그 대신 봉투가 자기가 읽은
     것을 적어 두면 같은 구분이 선다 — 지금 원장과 대조하면 어느 쪽이 움직였는지
-    가 바로 나온다."""
-    return {"source": source, "key": key, "value": value, "asof": asof}
+    가 바로 나온다.
+
+    **원본과 파생을 구분한다.** `raw` 는 원장의 칸 하나라 되짚기가 그대로
+    대조할 수 있다. `derived` 는 데스크가 계산한 값이다 — 60일 평균 거래대금을
+    원장의 '거래대금' 칸과 비교하면 아무것도 안 바뀌었는데 '데이터가 바뀜' 이
+    나온다. **거짓 '바뀜' 은 거짓 '일치' 만큼 나쁘다** — 회의에 자료가
+    움직였다고 알리기 때문이다.
+
+    파생값은 `basis` 에 어떻게 만들었는지 적는다. 되짚기가 대신 계산해 주지는
+    않지만, 사람이 다시 계산할 수 있어야 한다."""
+    if kind not in (RAW, DERIVED):
+        raise ValueError(f"kind 는 {RAW!r} 또는 {DERIVED!r} 여야 합니다: {kind!r}")
+    o = {"source": source, "key": key, "value": value, "asof": asof, "kind": kind}
+    if kind == DERIVED:
+        o["basis"] = basis or ""
+    return o
 
 
 def _walk_keys(obj, path=()):
@@ -144,6 +163,13 @@ def validate(env: dict) -> list[str]:
                         p.append(f"read[{i}].{k} 가 비어 있습니다")
                 if "value" not in o:
                     p.append(f"read[{i}].value 가 없습니다 (None 이어도 적습니다)")
+                kd = o.get("kind", RAW)
+                if kd not in (RAW, DERIVED):
+                    p.append(f"read[{i}].kind 는 {RAW!r} 또는 {DERIVED!r} 여야 합니다")
+                # 파생값은 어떻게 만들었는지 적어야 한다. 안 적으면 나중에
+                # 그 숫자를 다시 만들 방법이 없고, 되짚기가 거기서 끝난다.
+                if kd == DERIVED and not str(o.get("basis") or "").strip():
+                    p.append(f"read[{i}]: 파생값은 basis 에 계산 방법을 적어야 합니다")
     # 값을 냈으면 무엇을 읽고 냈는지 적어야 한다. 적지 않으면 나중에 그 값이
     # 왜 그랬는지 되짚을 수 없고, 리플레이는 말로만 남는다.
     if env.get("value") is not None and not rd:
@@ -271,7 +297,9 @@ def _sample() -> dict:
         method={"paper": "amihud2002", "paper_state": "unverified",
                 "assumes": {"participation": 0.15}},
         read=[observation("KRX/일별매매정보", "000660.close", 88.0, "2026-09-11"),
-              observation("KRX/일별매매정보", "000660.value", 1.0e8, "2026-09-11")],
+              observation("KRX/일별매매정보", "000660.adv60", 1.0e8, "2026-09-11",
+                          kind=DERIVED,
+                          basis="최근 60영업일 거래대금의 산술평균")],
         limits=["논문 표본은 미국 상장주 — 코스닥 외삽 근거가 아니다"],
     )
 
@@ -388,6 +416,33 @@ def selftest() -> int:
         _assert(any("asof" in x for x in probs), probs)
         _assert(any("value" in x for x in probs), probs)
     check("관측은 출처·키·기준일·값을 모두 적는다", _read_shape)
+
+    def _derived_needs_basis():
+        """파생값은 어떻게 만들었는지 적어야 한다.
+
+        60일 평균 거래대금을 원장의 '거래대금' 칸과 대조하면 아무것도 안
+        바뀌었는데 '데이터가 바뀜' 이 나온다. 그것을 막으려면 되짚기가 파생인
+        줄 알아야 하고, 사람이 다시 계산할 수 있어야 한다."""
+        e = _sample()
+        e["read"] = [{"source": "KRX", "key": "000660.adv60", "value": 1.0,
+                      "asof": "2026-09-11", "kind": "derived"}]
+        _assert(any("basis" in x for x in validate(e)), validate(e))
+        e["read"][0]["basis"] = "60영업일 평균"
+        _assert(validate(e) == [], validate(e))
+    check("파생값은 계산 방법을 적어야 한다", _derived_needs_basis)
+
+    def _kind_defaults_to_raw():
+        o = observation("KRX", "000660.close", 88.0, "2026-09-11")
+        _assert(o["kind"] == RAW and "basis" not in o)
+        d = observation("KRX", "000660.adv60", 1.0, "2026-09-11",
+                        kind=DERIVED, basis="60일 평균")
+        _assert(d["kind"] == DERIVED and d["basis"])
+        try:
+            observation("KRX", "k", 1.0, "2026-09-11", kind="추정")
+        except ValueError:
+            return
+        raise AssertionError("없는 kind 가 통과했습니다")
+    check("관측은 기본이 원본이고 없는 종류를 거절한다", _kind_defaults_to_raw)
 
     def _read_none_value_ok():
         """못 읽은 것도 적는다 — 0 으로 채우지 않고 None 으로 적는다."""

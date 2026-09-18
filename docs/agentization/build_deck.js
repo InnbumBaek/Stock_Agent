@@ -806,7 +806,7 @@ function sRoadmap() {
     });
   });
 
-  const outs = [["코드로 끝난 것", "스키마 · 러너 · 관문 · 트리거 · 사이클 · 되짚기 — 자체 검사 193개", GRN],
+  const outs = [["코드로 끝난 것", "스키마 · 러너 · 관문 · 트리거 · 사이클 · 되짚기 — 자체 검사 199개", GRN],
                 ["원장이 있어야 되는 것", "12편 중 5편의 실제 재현 · 채택률 · 트리거 발생률 실측", AMB],
                 ["사람이 정할 것", "병행 2주 결과로 전환 여부 — 이 덱이 아니라 회의에서", MAG]];
   outs.forEach((o, i) => {
@@ -844,7 +844,7 @@ function sNext() {
   });
 
   mono(s, "성공 판정 지표", { x: 8.6, y: 1.62, w: 4.1, h: 0.28, fontSize: 12, bold: true, color: AMB, charSpacing: 1 });
-  const kpi = [["193개", "자체 검사", "키·네트워크·원장 없이 돈다", GRN],
+  const kpi = [["199개", "자체 검사", "키·네트워크·원장 없이 돈다", GRN],
                ["0줄", "ki_monitor.py 변경", "측정층은 손대지 않았다", CYN],
                ["8 / 12", "검정 대상 논문", "나머지 4편은 원래 대상 아님", AMB],
                ["0건", "미분류 논문", "전부 셋 중 하나로 분류됐다", MAG]];
@@ -886,7 +886,7 @@ function sExec() {
 
   const st = [["주 1회", "논문 사이클", "신규 + 재검 도래분"], ["N", "살아있는 논문", "고정값이 아니다"],
               ["7", "발행 게이트", "재현 관문 신설"], ["0", "원장 쓰기 권한", "에이전트는 못 쓴다"],
-              ["0줄", "ki_monitor.py 변경", "측정층은 그대로"], ["193개", "자체 검사", "키·망·원장 없이"]];
+              ["0줄", "ki_monitor.py 변경", "측정층은 그대로"], ["199개", "자체 검사", "키·망·원장 없이"]];
   st.forEach((t, i) => {
     const x = 8.72 + (i % 2) * 2.02, y = 1.82 + Math.floor(i / 2) * 1.42;
     panel(s, { x, y, w: 1.88, h: 1.3, fill: PANEL, line: EDGE });
@@ -1133,7 +1133,7 @@ function sStack() {
 
   panel(s, { x: M, y: 6.62, w: CW, h: 0.5, fill: PANEL3, line: EDGE });
   txt(s, [
-    { text: "실제로 들어간 것 — agents/ 파이썬 11개 · 데스크 정의 9 · 스킬 5 · 자체 검사 193개. ", options: { bold: true, color: GRN } },
+    { text: "실제로 들어간 것 — agents/ 파이썬 11개 · 데스크 정의 9 · 스킬 5 · 자체 검사 199개. ", options: { bold: true, color: GRN } },
     { text: "기존 코드 변경은 0줄이다. ki_monitor.py 는 열지 않았다.", options: { color: INK } },
   ], { x: M + 0.26, y: 6.62, w: CW - 0.52, h: 0.5, fontSize: 10.5, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
@@ -1248,19 +1248,19 @@ function sAppendix() {
     '├─ docs/                 audit.py 에 정의 대조 [10] 추가',
     '├─ RUN_ALL · SCHEDULE    월 07:40 주간 재현 한 줄 추가',
     '│',
-    '├─ agents/               ← 들어감 (자체 검사 193개)',
-    '│   ├─ envelope.py          봉투 스키마 · 검증기      16',
+    '├─ agents/               ← 들어감 (자체 검사 199개)',
+    '│   ├─ envelope.py          봉투 스키마 · 검증기      21',
     '│   ├─ papers.py            논문 장부 ki.papers/2    19',
     '│   ├─ replication.py       분위 러너 (달력 시간)    25',
     '│   ├─ eventstudy.py        이벤트 러너 (사건 시간)   16',
     '│   ├─ gates.py             게이트 ①~⑦ 검사기     20',
     '│   ├─ ki_ledger_mcp.py     MCP 서버 · 읽기 10종   27',
     '│   ├─ selftest.py          다섯 개를 한 번에',
-    '│   ├─ triggers.py          트리거 스캐너 · 소집      16',
+    '│   ├─ triggers.py          트리거 스캐너 · 소집      17',
     '│   ├─ cycle.py             주간 논문 사이클         13',
     '│   ├─ run_day.py           소집 → 게이트 → 발행     14',
     '│   ├─ scorecard.py         계측 (고치지는 않는다)    11',
-    '│   └─ replay.py            되짚기 · 원장 대조         12',
+    '│   └─ replay.py            되짚기 · 원장 대조         15',
     '│',
     '└─ .claude/',
     '    ├─ agents/              데스크 9개 정의',
@@ -1291,7 +1291,7 @@ function sAppendix() {
     txt(s, n[0], { x: 8.0, y: y + 0.12, w: 4.5, h: 0.3, fontSize: 12, bold: true, color: n[2] });
     txt(s, n[1], { x: 7.74, y: y + 0.44, w: 4.76, h: 0.56, fontSize: 9.5, color: MUT });
   });
-  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 11 · 데스크 정의 9 · 스킬 5 · 자체 검사 193개 · ki_monitor.py 변경 0줄");
+  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 11 · 데스크 정의 9 · 스킬 5 · 자체 검사 199개 · ki_monitor.py 변경 0줄");
 }
 
 

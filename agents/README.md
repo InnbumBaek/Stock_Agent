@@ -16,13 +16,13 @@ papers.py         논문 장부 ki.papers/2 — 네 상태 · append-only       
 replication.py    분위 러너 — 달력 시간. 결정적이다                     25
 eventstudy.py     이벤트 러너 — 사건 시간. 두 통계를 나눠 쓴다          16
 gates.py          게이트 ①~⑦. 통과 아니면 반려다                      20
-triggers.py       트리거 스캐너 — 원장의 변화가 데스크를 부른다         16
+triggers.py       트리거 스캐너 — 원장의 변화가 데스크를 부른다         17
 ki_ledger_mcp.py  원장을 읽는 MCP 서버 · 읽기 10종. 쓰기 도구가 없다    27
 cycle.py          주간 논문 사이클 — 감가 · 재검 · 기록                13
 run_day.py        하루 운영 — 소집(작업지시서) · 게이트 → 발행         14
 scorecard.py      계측. 고치지는 않는다                               11
-replay.py         되짚기 — 봉투가 읽은 것과 지금 원장을 대조          12
-                                                            합계  193
+replay.py         되짚기 — 봉투가 읽은 것과 지금 원장을 대조          15
+                                                            합계  199
 ```
 
 정의 파일은 저장소 루트의 `.claude/` 에 있다.
@@ -35,7 +35,7 @@ replay.py         되짚기 — 봉투가 읽은 것과 지금 원장을 대조 
 ## 검증
 
 ```bash
-python agents/selftest.py          # 193개. 키·네트워크·원장 없이 돈다
+python agents/selftest.py          # 199개. 키·네트워크·원장 없이 돈다
 python agents/gates.py --selftest  # 모듈 하나만 돌릴 수도 있다
 python docs/audit.py               # 정의 파일이 코드와 어긋나지 않는지
 ```

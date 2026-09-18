@@ -38,6 +38,7 @@ DATA_MOVED = "데이터가 바뀜"
 GONE = "원장에서 사라짐"
 NOT_RECORDED = "재생 불가 — 읽은 것을 적지 않음"
 UNKNOWN_KEY = "키를 해석할 수 없음"
+DERIVED = "파생값 — 다시 계산해야 대조된다"
 
 # 부동소수 비교. 종가·거래대금은 실수라 정확히 같기를 요구하면 늘 다르다고 나온다.
 REL_TOL = 1e-9
@@ -54,6 +55,20 @@ def _close(a, b) -> bool:
         return True
     scale = max(abs(fa), abs(fb))
     return abs(fa - fb) <= REL_TOL * scale
+
+
+def _lookup_paper(key: str, ledger: dict):
+    """논문 장부의 값. `<논문키>.state` 만 받는다.
+
+    데스크가 `paper_state` 를 적으려면 장부를 읽어야 하고, 읽었으면 그것도
+    되짚을 수 있어야 한다. 장부는 append-only 라 그때 판정이 남아 있다."""
+    paper, _, field = key.partition(".")
+    if field != "state":
+        return None, UNKNOWN_KEY, "논문 장부에서 읽을 수 있는 것은 state 뿐입니다"
+    st = P.state_of(ledger or {}, paper)
+    if st is None:
+        return None, GONE, f"장부에 없는 논문입니다: {paper}"
+    return st, None, None
 
 
 def _lookup(con, key: str):
@@ -109,10 +124,21 @@ def replay(env: dict, con, paper_ledger: dict = None,
         return out
 
     for o in rd or []:
-        now, verdict, why = _lookup(con, o.get("key"))
+        key, kind = o.get("key"), o.get("kind", E.RAW)
+        if kind == E.DERIVED:
+            # 파생값을 원장의 칸과 대조하면 아무것도 안 바뀌었는데 '데이터가
+            # 바뀜' 이 나온다. 거짓 '바뀜' 은 거짓 '일치' 만큼 나쁘다.
+            now, verdict, why = None, DERIVED, (
+                f"데스크가 계산한 값입니다 ({o.get('basis') or '계산 방법 미기재'}). "
+                f"되짚으려면 같은 방법으로 다시 계산해야 합니다.")
+        elif P.state_of(paper_ledger or {}, str(key).partition(".")[0]) is not None \
+                or str(key).endswith(".state"):
+            now, verdict, why = _lookup_paper(str(key), paper_ledger)
+        else:
+            now, verdict, why = _lookup(con, key)
         if verdict is None:
             verdict = SAME if _close(o.get("value"), now) else DATA_MOVED
-        row = {"key": o.get("key"), "source": o.get("source"),
+        row = {"key": key, "source": o.get("source"), "kind": kind,
                "then": o.get("value"), "now": now,
                "asof_then": o.get("asof"), "verdict": verdict}
         if why:
@@ -133,15 +159,23 @@ def replay(env: dict, con, paper_ledger: dict = None,
                      "그때 판정이 무엇이었는지는 장부에 남아 있습니다."),
         }
 
-    moved = [o for o in out["observations"] if o["verdict"] != SAME]
+    # 파생값은 '움직였다'가 아니다 — 대조하지 못했을 뿐이다.
+    derived = [o for o in out["observations"] if o["verdict"] == DERIVED]
+    moved = [o for o in out["observations"]
+             if o["verdict"] not in (SAME, DERIVED)]
+    if derived:
+        out["derived"] = len(derived)
     if moved:
         out["reason"] = (
             f"읽은 값 {len(moved)}개가 그때와 다릅니다. **에이전트가 틀렸다고 "
             f"보기 전에 자료가 움직였는지를 먼저 보십시오** — 정정공시가 오면 "
             f"원장의 같은 칸이 덮어써집니다.")
     elif out["observations"]:
-        out["reason"] = ("읽은 값이 그때와 전부 같습니다. 문장이 지금 이상해 "
-                         "보인다면 자료가 아니라 읽은 방식을 보십시오.")
+        tail = (f" 파생값 {len(derived)}개는 대조하지 않았습니다 — 같은 방법으로 "
+                f"다시 계산해야 합니다." if derived else "")
+        out["reason"] = ("원본으로 읽은 값은 그때와 전부 같습니다. 문장이 지금 "
+                         "이상해 보인다면 자료가 아니라 읽은 방식을 보십시오."
+                         + tail)
     return out
 
 
@@ -200,7 +234,8 @@ def selftest() -> int:
         r = replay(E._sample(), con, led, at="2026-12-01")
         con.close()
         _assert(r["replayable"] and not r["data_moved"], r)
-        _assert(all(o["verdict"] == SAME for o in r["observations"]), r["observations"])
+        raw = [o for o in r["observations"] if o["kind"] == E.RAW]
+        _assert(raw and all(o["verdict"] == SAME for o in raw), r["observations"])
         _assert("읽은 방식" in r["reason"])
     check("자료가 그대로면 '읽은 방식을 보라'고 한다", _same)
 
@@ -235,6 +270,51 @@ def selftest() -> int:
         con.close()
         _assert(r["replayable"] and not r["data_moved"])
     check("값이 없는 봉투는 재생 불가가 아니다", _no_value_is_replayable)
+
+    def _derived_is_not_moved():
+        """파생값을 원장의 칸과 대조해 '바뀜' 이라고 하지 않는다.
+
+        통합 실행에서 실제로 나온 오탐이다. 60일 평균 거래대금을 원장의
+        '거래대금' 칸과 비교하니 아무것도 안 바뀌었는데 '데이터가 바뀜' 이
+        나왔다. 거짓 '바뀜' 은 회의에 자료가 움직였다고 알린다."""
+        e = E._sample()
+        con = _con()
+        r = replay(e, con, led, at="2026-12-01")
+        con.close()
+        d = [o for o in r["observations"] if o["kind"] == E.DERIVED]
+        _assert(len(d) == 1, r["observations"])
+        _assert(d[0]["verdict"] == DERIVED)
+        _assert(d[0]["now"] is None)
+        _assert("다시 계산" in d[0]["reason"])
+        _assert(not r["data_moved"], "파생값이 '움직임' 으로 세어졌습니다")
+        _assert(r["derived"] == 1)
+    check("파생값을 '데이터가 바뀜' 으로 오판하지 않는다", _derived_is_not_moved)
+
+    def _paper_state_observation():
+        """논문 장부 읽기도 되짚어진다."""
+        e = E._sample()
+        e["read"] = [E.observation("논문 장부", "amihud2002.state",
+                                   "unverified", "2026-09-11")]
+        con = _con()
+        same = replay(e, con, led, at="2026-12-01")
+        moved_led = P.record(led, "amihud2002",
+                             {"verdict": "재현됨", "observed": {"t": 4.2}},
+                             at="2026-10-01")
+        moved = replay(e, con, moved_led, at="2026-12-01")
+        con.close()
+        _assert(same["observations"][0]["verdict"] == SAME, same["observations"])
+        _assert(moved["observations"][0]["verdict"] == DATA_MOVED)
+        _assert(moved["observations"][0]["now"] == "adopted")
+    check("논문 장부 읽기도 되짚어진다", _paper_state_observation)
+
+    def _unknown_paper_field():
+        e = E._sample()
+        e["read"] = [E.observation("논문 장부", "amihud2002.limits", [], "2026-09-11")]
+        con = _con()
+        r = replay(e, con, led, at="2026-12-01")
+        con.close()
+        _assert(r["observations"][0]["verdict"] == UNKNOWN_KEY)
+    check("논문 장부에서 state 외의 키는 거절한다", _unknown_paper_field)
 
     def _gone():
         e = E._sample()
