@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import cycle                                             # noqa: E402
+import dialect                                           # noqa: E402
 import envelope                                          # noqa: E402
 import eventstudy                                        # noqa: E402
 import gates                                             # noqa: E402
@@ -25,7 +26,10 @@ import run_day                                           # noqa: E402
 import scorecard                                         # noqa: E402
 import triggers                                          # noqa: E402
 
-MODULES = (envelope, papers, replication, eventstudy, gates, triggers,
+# `dialect` 가 맨 앞이다. 원장의 형식을 잘못 짚으면 그 아래 전부가 '원장에
+# 없습니다' 를 내는데, 그 문장은 코드가 틀렸다는 뜻이 아니라 자료가 없다는
+# 뜻으로 읽힌다 — 이 줄이 실패하면 아래의 통과는 뜻이 없다.
+MODULES = (dialect, envelope, papers, replication, eventstudy, gates, triggers,
            ki_ledger_mcp, cycle, reconcile, run_day, scorecard, replay)
 
 

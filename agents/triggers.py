@@ -20,8 +20,12 @@ import argparse
 import json
 import sqlite3
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import dialect as D                                      # noqa: E402
 
 SCHEMA = "ki.triggers/1"
 
@@ -82,7 +86,7 @@ class Trigger:
 
 
 def _bdays_before(d: str, n: int) -> str:
-    cur = datetime.fromisoformat(d).date()
+    cur = D.parse_date(d)
     left = n
     while left > 0:
         cur -= timedelta(days=1)
@@ -102,19 +106,27 @@ def _route_disclosure(title: str, tags: str) -> tuple[tuple, str]:
 # ── 스캐너 ────────────────────────────────────────────────────────────
 
 def scan_disclosures(con, since: str, limit: int = 200) -> list[Trigger]:
-    """새 공시 하나에 소집 하나. 공시 종류로 어느 데스크인지 갈린다."""
+    """새 공시 하나에 소집 하나. 공시 종류로 어느 데스크인지 갈린다.
+
+    DART 의 `rcept_dt` 는 `"20260108"` 이다. `since` 는 ISO 다. 둘을 맨눈으로
+    비교하면 같은 해의 옛 공시가 전부 '새 공시'가 된다 (`dialect.sql_date`)."""
+    cut = D.norm_date(since)
     rows = con.execute(
-        "SELECT rcept_no, code, rcept_dt, title, tags FROM disclosure "
-        "WHERE rcept_dt > ? ORDER BY rcept_dt, rcept_no LIMIT ?",
-        (since, limit)).fetchall()
+        f"SELECT rcept_no, code, rcept_dt, title, tags FROM disclosure "
+        f"WHERE {D.sql_date('rcept_dt')} > ? "
+        f"ORDER BY {D.sql_date('rcept_dt')}, rcept_no LIMIT ?",
+        (cut, limit)).fetchall()
     out = []
     for r in rows:
         desks, why = _route_disclosure(r["title"], r["tags"])
+        # 밖으로 내는 날짜는 ISO 다. 봉투·소집·리포트가 모두 ISO 를 쓰는데
+        # 여기만 원장 형식을 흘리면 두 형식이 섞여 대조가 어긋난다.
+        dt = D.iso_date(r["rcept_dt"])
         out.append(Trigger(
             "disclosure.new", r["rcept_no"], desks,
             {"code": r["code"], "rcept_no": r["rcept_no"],
-             "rcept_dt": r["rcept_dt"], "title": r["title"]},
-            why, r["rcept_dt"], tier="T1"))
+             "rcept_dt": dt, "title": r["title"]},
+            why, dt, tier="T1"))
     return out
 
 
@@ -123,24 +135,35 @@ def scan_price_moves(con, since: str, pct: float = MOVE_PCT) -> list[Trigger]:
 
     종목당 하나만 낸다. 사흘 연속 움직였다고 세 번 부르면, 세 인스턴스가 거의
     같은 말을 하고 그중 하나만 회의에 올라간다."""
+    # 창의 시작을 파이썬에서 계산한다. SQLite 의 `date(?, '-7 day')` 에
+    # 기대면 안 된다 — 그 함수는 ISO 만 받고 원장은 `"20260911"` 이라, 비교가
+    # 4번째 글자에서 무너져 **같은 해 전체**가 창 안으로 들어온다. 그러면 여덟
+    # 달 전 하락이 오늘의 소집으로 올라간다.
+    base = D.parse_date(since)
+    if base is None:
+        return []
+    cut = D.norm_date((base - timedelta(days=7)).isoformat())
+    since_c = D.norm_date(since)
     rows = con.execute(
-        "SELECT date, code, close FROM price_daily "
-        "WHERE date > date(?, '-7 day') ORDER BY code, date", (since,)).fetchall()
+        f"SELECT date, code, close FROM price_daily "
+        f"WHERE {D.sql_date('date')} > ? "
+        f"ORDER BY code, {D.sql_date('date')}", (cut,)).fetchall()
     out, prev, seen = [], {}, set()
     for r in rows:
-        c, d, px = r["code"], r["date"], r["close"]
+        c, d, px = r["code"], D.norm_date(r["date"]), r["close"]
         p = prev.get(c)
         prev[c] = px
-        if p is None or not p or d <= since or c in seen:
+        if p is None or not p or d <= since_c or c in seen:
             continue
         chg = (px / p - 1.0) * 100.0
         if abs(chg) >= pct:
             seen.add(c)
+            iso = D.iso_date(d)                  # 밖으로는 ISO 로 낸다
             out.append(Trigger(
                 "price.move", c, ("q2-disposal", "risk-officer"),
-                {"code": c, "date": d, "change_pct": round(chg, 2),
+                {"code": c, "date": iso, "change_pct": round(chg, 2),
                  "close": px, "prev_close": p},
-                f"종가가 하루에 {chg:+.1f}% 움직였다 (임계 ±{pct}%)", d))
+                f"종가가 하루에 {chg:+.1f}% 움직였다 (임계 ±{pct}%)", iso))
     return sorted(out, key=lambda t: t.subject)
 
 
@@ -151,9 +174,10 @@ def scan_lockups(con, today: str, warn_d: int = LOCKUP_WARN_D) -> list[Trigger]:
         "WHERE list_date IS NOT NULL AND list_date <> '' ORDER BY code").fetchall()
     out = []
     for r in rows:
-        try:
-            ld = datetime.fromisoformat(r["list_date"]).date()
-        except (ValueError, TypeError):
+        # KRX `LIST_DD` 는 `"20170102"` 다. `fromisoformat` 이 그 형식을 받는
+        # 것은 3.11 부터라, 3.10 에서는 전 종목이 조용히 빠진다.
+        ld = D.parse_date(r["list_date"])
+        if ld is None:
             continue
         m = ld.month - 1 + LOCKUP_MONTHS
         try:
@@ -164,7 +188,7 @@ def scan_lockups(con, today: str, warn_d: int = LOCKUP_WARN_D) -> list[Trigger]:
         if warn_from <= today <= end.isoformat():
             out.append(Trigger(
                 "lockup.d30", r["code"], ("q3-execution", "q4-timing"),
-                {"code": r["code"], "list_date": r["list_date"],
+                {"code": r["code"], "list_date": ld.isoformat(),
                  "lockup_end": end.isoformat(),
                  "lockup_months": LOCKUP_MONTHS},
                 f"보호예수 해제({end.isoformat()})가 {warn_d}영업일 안으로 들어왔다. "
@@ -175,16 +199,24 @@ def scan_lockups(con, today: str, warn_d: int = LOCKUP_WARN_D) -> list[Trigger]:
 
 def scan_macro(con, since: str) -> list[Trigger]:
     """거시 지표가 갱신됐다. 국면 서술이 달라질 수 있다. 하루 한 번만."""
-    r = con.execute("SELECT MAX(date) AS d FROM macro_daily").fetchone()
+    # `macro_daily` 는 한 형식이 아니다. KRX 경로는 `"20260911"`, FRED 경로는
+    # 판다스 Timestamp 가 그대로 들어가 `"2026-09-11 00:00:00"` 이다. 가장
+    # 최근 날짜를 고르려면 둘을 같은 자로 재야 한다 — 맨눈으로 MAX 를 뽑으면
+    # 형식이 긴 쪽이 늘 이긴다.
+    r = con.execute(
+        f"SELECT MAX({D.sql_date('date')}) AS d FROM macro_daily").fetchone()
     last = r["d"] if r else None
-    if not last or last <= since:
+    if not last or last <= D.norm_date(since):
         return []
+    # 키도 정규화한 날짜로 고른다. 같은 날이 두 형식으로 들어와 있으면
+    # (KRX 가 넣은 행과 FRED 가 넣은 행) 한쪽만 세게 된다.
     keys = [x["key"] for x in con.execute(
-        "SELECT DISTINCT key FROM macro_daily WHERE date = ? ORDER BY key",
-        (last,)).fetchall()]
-    return [Trigger("macro.update", last, ("q4-timing",),
-                    {"date": last, "keys": keys},
-                    "거시 지표가 갱신됐다", last)]
+        f"SELECT DISTINCT key FROM macro_daily "
+        f"WHERE {D.sql_date('date')} = ? ORDER BY key", (last,)).fetchall()]
+    iso = D.iso_date(last)
+    return [Trigger("macro.update", iso, ("q4-timing",),
+                    {"date": iso, "keys": keys},
+                    "거시 지표가 갱신됐다", iso)]
 
 
 def scan_paper_rechecks(paper_ledger: dict, today: str,
@@ -263,7 +295,27 @@ def scan(con, today: str = None, since: str = None,
 
 # ── 자체 검사 ─────────────────────────────────────────────────────────
 
-def _ledger(rows_price=(), disclosures=(), instruments=(), macro=()) -> sqlite3.Connection:
+# 합성 원장이 쓸 시장 이름. 진짜 원장이 쓰는 값이다 (`dialect`).
+_MKT = D.MARKET_ALIASES["KOSDAQ"][0]
+
+
+def _ledger(rows_price=(), disclosures=(), instruments=(), macro=(),
+            iso: bool = False) -> sqlite3.Connection:
+    """합성 원장.
+
+    호출부는 읽기 쉬운 ISO·영문으로 준다. 표에 **들어가는 것은 진짜 원장의
+    형식**이다 — 날짜는 `YYYYMMDD`, 시장은 한글. 여기서 호출부의 형식을 그대로
+    넣으면 검사가 자기 가정을 다시 확인할 뿐이고, 그 사이 스캐너는 진짜
+    원장에서 여덟 달 전 하락을 오늘의 소집으로 올린다.
+
+    `iso=True` 는 형식이 바뀐 원장을 흉내 낸다 — 읽는 쪽이 짐작하지 않고
+    물어보는지 확인하는 용도다."""
+    def _d(v):
+        return D.iso_date(v) if iso else D.norm_date(v)
+
+    def _m(v):
+        return v if iso else (D._pick([_MKT], v) or _MKT)
+
     con = sqlite3.connect(":memory:")
     con.row_factory = sqlite3.Row
     con.executescript("""
@@ -277,10 +329,13 @@ def _ledger(rows_price=(), disclosures=(), instruments=(), macro=()) -> sqlite3.
       PRIMARY KEY (date, key));
     """)
     con.executemany("INSERT INTO price_daily (date, code, market, close) VALUES (?,?,?,?)",
-                    rows_price)
-    con.executemany("INSERT INTO disclosure VALUES (?,?,?,?,?)", disclosures)
-    con.executemany("INSERT INTO instruments VALUES (?,?,?,?)", instruments)
-    con.executemany("INSERT INTO macro_daily VALUES (?,?,?)", macro)
+                    [(_d(d), c, _m(m), px) for d, c, m, px in rows_price])
+    con.executemany("INSERT INTO disclosure VALUES (?,?,?,?,?)",
+                    [(no, c, _d(dt), t, g) for no, c, dt, t, g in disclosures])
+    con.executemany("INSERT INTO instruments VALUES (?,?,?,?)",
+                    [(c, n, _m(m), _d(ld)) for c, n, m, ld in instruments])
+    con.executemany("INSERT INTO macro_daily VALUES (?,?,?)",
+                    [(_d(d), k, v) for d, k, v in macro])
     con.commit()
     return con
 
@@ -515,6 +570,92 @@ def selftest() -> int:
         con.close()
         _assert(before == after)
     check("원장을 읽기만 한다", _reads_only)
+
+    # ── 원장의 말 (dialect) ───────────────────────────────────────────
+    #
+    # 스캐너의 창은 문자열 비교로 서 있었다. 원장은 `"20260911"`, `since` 는
+    # ISO `"2026-09-11"` 이라 4번째 글자에서 `'0'` 과 `'-'` 이 만나고, 그때
+    # **같은 해의 모든 날짜가 창 안으로 들어온다.** 없는 결과가 나오면 차라리
+    # 나았다 — 실제로는 여덟 달 전 -40% 하락이 오늘의 소집으로 올라왔다.
+
+    def _fixture_is_the_real_dialect():
+        con = _ledger(rows_price=[("2026-09-11", "000660", "KOSDAQ", 100.0)],
+                      instruments=[("000660", "샘플", "KOSDAQ", "2026-03-20")])
+        d = con.execute("SELECT date, market FROM price_daily").fetchone()
+        i = con.execute("SELECT market, list_date FROM instruments").fetchone()
+        con.close()
+        _assert(d["date"] == "20260911", d["date"])
+        _assert(d["market"] == "코스닥", d["market"])
+        _assert(i["market"] == "코스닥" and i["list_date"] == "20260320", tuple(i))
+    check("합성 원장이 진짜 원장의 형식이다", _fixture_is_the_real_dialect)
+
+    def _window_is_seven_days_not_this_year():
+        """창 밖의 하락을 오늘의 소집으로 올리지 않는다."""
+        con = _ledger(rows_price=[("2026-01-05", "000660", "KOSDAQ", 100.0),
+                                  ("2026-01-08", "000660", "KOSDAQ", 60.0),
+                                  ("2026-09-10", "000660", "KOSDAQ", 100.0),
+                                  ("2026-09-11", "000660", "KOSDAQ", 100.2)])
+        ts = scan_price_moves(con, "2026-09-10")
+        con.close()
+        _assert(ts == [], [t.as_dict() for t in ts])
+    check("가격 창은 7일이다 (같은 해 전체가 아니다)",
+          _window_is_seven_days_not_this_year)
+
+    def _old_disclosure_is_not_new():
+        con = _ledger(disclosures=[("X", "000660", "2026-01-08", "유상증자 결정", "")])
+        ts = scan_disclosures(con, "2026-09-11")
+        con.close()
+        _assert(ts == [], [t.as_dict() for t in ts])
+    check("옛 공시는 새 공시가 아니다", _old_disclosure_is_not_new)
+
+    def _macro_max_is_by_date_not_by_string_length():
+        """`macro_daily` 는 한 형식이 아니다 — KRX 는 `20260911`, FRED 를 거친
+        행은 `2026-09-11 00:00:00` 이다. 맨눈 MAX 는 긴 쪽이 늘 이긴다."""
+        con = _ledger(macro=[("2026-09-11", "k1", 1.0)])
+        con.execute("INSERT INTO macro_daily VALUES ('2026-01-08 00:00:00','k2',2.0)")
+        con.commit()
+        ts = scan_macro(con, "2026-09-10")
+        con.close()
+        _assert(len(ts) == 1, [t.as_dict() for t in ts])
+        _assert(ts[0].inputs["date"] == "2026-09-11", ts[0].as_dict())
+        _assert(ts[0].inputs["keys"] == ["k1"], ts[0].as_dict())
+    check("거시는 형식이 섞여 있어도 가장 최근 날을 고른다",
+          _macro_max_is_by_date_not_by_string_length)
+
+    def _macro_same_day_two_formats():
+        """같은 날이 두 형식으로 들어와 있으면 (KRX 행과 FRED 행) 한쪽만
+        세지 않는다 — 거시 지표 절반이 조용히 빠진다."""
+        con = _ledger(macro=[("2026-09-17", "krx_key", 1.0)])
+        con.execute("INSERT INTO macro_daily VALUES ('2026-09-17 00:00:00',"
+                    "'fred_key',2.0)")
+        con.commit()
+        ts = scan_macro(con, "2026-09-16")
+        con.close()
+        _assert(len(ts) == 1, [t.as_dict() for t in ts])
+        _assert(ts[0].inputs["keys"] == ["fred_key", "krx_key"],
+                ts[0].as_dict())
+    check("같은 날이 두 형식이어도 키를 다 센다", _macro_same_day_two_formats)
+
+    def _emits_iso_whatever_the_ledger_stores():
+        """밖으로 내는 날짜는 ISO 다. 여기만 원장 형식을 흘리면 봉투·대조가
+        두 형식으로 갈린다."""
+        for iso in (False, True):
+            con = _ledger(
+                rows_price=[("2026-09-10", "000660", "KOSDAQ", 100.0),
+                            ("2026-09-11", "000660", "KOSDAQ", 88.0)],
+                disclosures=[("X", "000660", "2026-09-11", "유상증자 결정", "")],
+                instruments=[("000660", "샘플", "KOSDAQ", "2026-03-20")],
+                macro=[("2026-09-11", "k", 1.0)], iso=iso)
+            r = scan(con, today="2026-09-11", since="2026-09-10")
+            con.close()
+            for t in r["triggers"]:
+                _assert(len(t["at"]) == 10 and t["at"][4] == "-",
+                        (iso, t["kind"], t["at"]))
+            kinds = {t["kind"] for t in r["triggers"]}
+            _assert({"price.move", "disclosure.new", "macro.update"} <= kinds,
+                    (iso, kinds))
+    check("원장 형식과 무관하게 ISO 로 낸다",
+          _emits_iso_whatever_the_ledger_stores)
 
     for f in failed:
         print("  X  " + f, file=sys.stderr)

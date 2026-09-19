@@ -28,6 +28,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import dialect as D                                      # noqa: E402
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
 import envelope as E                                     # noqa: E402
 import papers as P                                       # noqa: E402
 
@@ -83,9 +88,11 @@ def _lookup(con, key: str):
         if col not in ("open", "high", "low", "close", "volume", "value",
                        "mktcap", "shares"):
             return None, UNKNOWN_KEY, f"모르는 칼럼입니다: {col}"
+        # 가장 최근 날을 고를 때도 원장의 형식으로 잰다. 한 칸에 두 형식이
+        # 섞여 있으면 맨눈 정렬은 긴 쪽을 최근으로 친다 (`dialect.sql_date`).
         r = con.execute(
             f"SELECT date, {col} AS v FROM price_daily WHERE code = ? "
-            f"ORDER BY date DESC LIMIT 1", (code,)).fetchone()
+            f"ORDER BY {D.sql_date('date')} DESC LIMIT 1", (code,)).fetchone()
         if r is None:
             return None, GONE, f"{code} 의 일봉이 원장에 없습니다"
         return r["v"], None, None
@@ -204,8 +211,9 @@ def _con(close=88.0, rev=1.0) -> sqlite3.Connection:
     CREATE TABLE fundamental (code TEXT, period TEXT, key TEXT, value REAL,
       PRIMARY KEY (code, period, key));
     """)
+    # 진짜 원장의 형식으로 적는다 — `YYYYMMDD` · 한글 (`dialect`).
     con.execute("INSERT INTO price_daily (date, code, market, close, value) "
-                "VALUES ('2026-09-11','000660','KOSDAQ',?,1.0e8)", (close,))
+                "VALUES ('20260911','000660','코스닥',?,1.0e8)", (close,))
     con.execute("INSERT INTO fundamental VALUES ('000660','2026Q2','rev',?)", (rev,))
     con.commit()
     return con
@@ -430,8 +438,9 @@ if __name__ == "__main__":
     if a.envelope:
         envs = [json.loads(Path(a.envelope).read_text(encoding="utf-8"))]
     else:
-        import run_day as D                               # noqa: E402
-        envs = D.load_envelopes(Path(a.envelopes))
+        # `D` 로 들여오지 않는다 — 모듈 전역의 `dialect as D` 를 덮어쓴다.
+        import run_day as RD                              # noqa: E402
+        envs = RD.load_envelopes(Path(a.envelopes))
     try:
         print(json.dumps(replay_all(envs, con, led), ensure_ascii=False, indent=a.indent))
     finally:

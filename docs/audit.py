@@ -443,6 +443,71 @@ else:
     (ok if not _tbad else bad)(
         f"문서의 재현 임계가 코드와 일치 (t≥{_R.T_MIN}) ({_tbad or '일치'})")
 
+# ── [11] 판단층이 원장의 말을 짐작하지 않는가 ────────────────────────
+#
+# 검사가 못 보는 자리다. 합성 자료로 검증하면 자기 자신을 검증하기 때문이다 —
+# 표를 만드는 쪽과 읽는 쪽이 같은 가정을 쓰면 둘 다 틀려도 통과한다.
+#
+# 진짜 원장은 날짜를 `"20260917"`, 시장·지수를 한글(`"코스닥"`)로 적는다.
+# 판단층이 `"KOSDAQ"` 이나 ISO 날짜를 질의에 박으면 **모든 질의가 빈다.**
+# 그리고 빈 결과는 '원장에 없습니다' 로 나간다 — 코드가 틀렸다는 말이 아니라
+# 자료가 없다는 말로. 실제로 있었던 일이고, 오류는 한 줄도 나지 않았다.
+
+print("\n[11] 판단층이 원장의 말을 짐작하지 않는가")
+
+_AG = sorted((ROOT / "agents").glob("*.py"))
+_SQLISH = re.compile(r'(?:SELECT|WHERE|ORDER BY|INSERT|VALUES)', re.I)
+_hard = []
+for f in _AG:
+    if f.name == "dialect.py":
+        continue                      # 별칭 표가 사는 곳이다
+    for i, line in enumerate(f.read_text(encoding="utf-8").splitlines(), 1):
+        if line.lstrip().startswith("#"):
+            continue
+        # SQLite 의 날짜 산술은 ISO 만 받는다. 원장은 ISO 가 아니다.
+        if re.search(r"\bdate\(\s*\?", line):
+            _hard.append(f"{f.name}:{i} SQLite date() 산술")
+        # 질의 안의 영문 시장·지수 이름
+        if _SQLISH.search(line) and re.search(r"KOSDAQ|KOSPI|KONEX", line):
+            _hard.append(f"{f.name}:{i} 질의 안의 영문 시장 이름")
+(ok if not _hard else bad)(
+    f"질의가 원장의 형식을 짐작하지 않는다 ({_hard or '없음'})")
+
+# 합성 원장이 진짜 원장의 형식으로 적히는가. 여기가 어긋나면 위의 모든 검사가
+# 자기 가정을 다시 확인할 뿐이다.
+_ISO_LIT = re.compile(r"""['"]\d{4}-\d{2}-\d{2}['"]""")
+# 원장의 말로 바꿔 주는 것들. 이것을 거친 ISO 문자열은 표에 그대로 들어가지
+# 않으므로 잡으면 안 된다 — 거짓 경보가 쌓이면 검사를 끄게 된다.
+_WRAP = re.compile(r'(?:_d|D\.norm_date|D\.iso_date|D\.as_ledger_date|'
+                   r'norm_date|as_ledger_date)\(\s*["\']'
+                   r'[^"\']*["\']\s*\)')
+
+
+def _stmt_at(txt: str, i: int) -> str:
+    """`INSERT INTO` 가 들어 있는 execute() 호출 하나의 본문.
+
+    줄 단위로 창을 잡으면 옆 줄의 상관없는 ISO 문자열까지 걸린다. 괄호가
+    닫힐 때까지가 한 문장이다."""
+    depth, j = 1, i
+    while j < len(txt) and depth > 0:
+        if txt[j] == "(":
+            depth += 1
+        elif txt[j] == ")":
+            depth -= 1
+        j += 1
+    return txt[i:j]
+
+
+_fix = []
+for f in _AG:
+    txt = f.read_text(encoding="utf-8")
+    for m in re.finditer(r"INSERT INTO", txt):
+        stmt = _WRAP.sub("", _stmt_at(txt, m.end()))
+        if _ISO_LIT.search(stmt):
+            _fix.append(f"{f.name}:{txt.count(chr(10), 0, m.start()) + 1}")
+(ok if not _fix else bad)(
+    f"합성 원장이 진짜 원장의 형식으로 적힌다 ({_fix or '전부 YYYYMMDD'})")
+
 print("\n" + "=" * 60)
 if fails:
     print(f"실패 {len(fails)}건")

@@ -20,9 +20,14 @@ import json
 import sqlite3
 import sys
 from datetime import date
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import dialect as D                                     # noqa: E402
 
 SCHEMA = "ki.replication/1"
 
@@ -96,26 +101,33 @@ def _monthly_panel(con: sqlite3.Connection, market: str,
         con, params=(market, start, end))
     if df.empty:
         return df
-    df["date"] = pd.to_datetime(df["date"])
+    df["date"] = pd.to_datetime(df["date"].map(D.norm_date), format="%Y%m%d")
     df = df.dropna(subset=["close"])
     df = df[df["close"] > 0]
     return df
 
 
-def _index_returns(con: sqlite3.Connection, market: str,
+def _index_returns(con: sqlite3.Connection, index_name: str,
                    start: str, end: str) -> pd.Series:
-    """지수 일간 수익률. 없으면 빈 것을 낸다 — 0 으로 대신하지 않는다."""
+    """지수 일간 수익률. 없으면 빈 것을 낸다 — 0 으로 대신하지 않는다.
+
+    받는 것은 **원장에 적힌 지수 이름**이다 (`dialect.resolve_index`). 여기에
+    시장 별칭을 그대로 넣으면 질의가 늘 비고, 빈 결과가 '지수가 원장에
+    없습니다' 로 나간다 — 코드가 틀렸다는 말이 아니라 자료 탓으로."""
+    if not index_name:
+        return pd.Series(dtype=float)
     try:
         idx = pd.read_sql_query(
             "SELECT date, close FROM index_daily WHERE index_name = ? "
             "AND date BETWEEN ? AND ? ORDER BY date",
-            con, params=(market, start, end))
+            con, params=(index_name, start, end))
     except Exception:                                     # noqa: BLE001
         return pd.Series(dtype=float)
     if idx.empty:
         return pd.Series(dtype=float)
     s = pd.Series(idx["close"].to_numpy(dtype=float),
-                  index=pd.to_datetime(idx["date"]))
+                  index=pd.to_datetime(idx["date"].map(D.norm_date),
+                                       format="%Y%m%d"))
     return s.pct_change().dropna()
 
 
@@ -337,9 +349,20 @@ def run(con: sqlite3.Connection, key: str, market: str = "KOSDAQ",
         return out
     out["claim"] = spec["claim"]
 
-    df = _monthly_panel(con, market, start, end)
+    # 원장이 쓰는 말로 바꾼다. 짐작하면 질의가 비고, 빈 결과는 '자료가 없다'
+    # 로 나간다 — 코드가 틀렸다는 말이 아니라.
+    mkt_name, why = D.resolve_market(con, market)
+    if mkt_name is None:
+        out["reason"] = why
+        return out
+    out["universe"] = mkt_name
+    style = D.date_style(con)
+    lo, hi = D.as_ledger_date(start, style), D.as_ledger_date(end, style)
+
+    df = _monthly_panel(con, mkt_name, lo, hi)
     if df.empty:
-        out["reason"] = f"원장에 {market} 일봉이 없습니다 (구간 {start}..{end})"
+        out["reason"] = (f"원장에 {mkt_name} 일봉이 없습니다 "
+                         f"(구간 {start}..{end})")
         return out
 
     df["ym"] = df["date"].dt.to_period("M")
@@ -356,10 +379,15 @@ def run(con: sqlite3.Connection, key: str, market: str = "KOSDAQ",
 
     kind = _FACTOR_KIND[spec["factor"]]
     if kind == "cross_mkt":
-        mkt = _index_returns(con, market, start, end)
+        idx_name, why_idx = D.resolve_index(con, mkt_name)
+        mkt = _index_returns(con, idx_name, lo, hi)
         if mkt.empty:
-            out["reason"] = (f"{market} 지수가 원장에 없습니다 — 잔차를 만들 "
-                             f"기준선이 없습니다")
+            # 사유는 두 겹이다 — 무엇이 없었는지(원장이 가진 이름을 함께)와,
+            # 그래서 무엇을 못 했는지. 뒤엣것이 빠지면 읽는 사람이 이 값을
+            # 0 으로 채워도 되는 줄 안다.
+            detail = why_idx or (f"{idx_name} 지수가 원장에 없습니다 "
+                                 f"(구간 {start}..{end})")
+            out["reason"] = f"{detail} — 잔차를 만들 기준선이 없습니다"
             return out
         fn = {"ivol": _factor_ivol}[spec["factor"]]
         sig = (df.groupby(["ym", "code"])
@@ -422,14 +450,24 @@ def run(con: sqlite3.Connection, key: str, market: str = "KOSDAQ",
 
 # ── 자체 검사 ─────────────────────────────────────────────────────────
 
+# 합성 원장이 쓸 시장 이름. 진짜 원장이 쓰는 값이다 — 영문을 박으면 검사가
+# 자기 가정을 다시 확인할 뿐이다.
+_MKT = D.MARKET_ALIASES["KOSDAQ"][0]
+
+
 def _synthetic(effect: float = 0.0, months: int = 72, names: int = 200,
                seed: int = 7, ivol_spread: float = 0.0) -> sqlite3.Connection:
     """합성 원장. 키도 네트워크도 쓰지 않는다.
 
     effect 는 '팩터 상위 분위가 다음 달에 더 버는 정도'다. 0 이면 아무 효과가
-    없는 세계 — 거기서 통과가 나오면 그 관문은 쓸모가 없다."""
+    없는 세계 — 거기서 통과가 나오면 그 관문은 쓸모가 없다.
+
+    **진짜 원장의 형식으로 만든다** — 날짜는 `YYYYMMDD`, 시장과 지수는 한글
+    (`dialect` 참고). 여기서 `"2019-01-01"` · `"KOSDAQ"` 으로 만들면 검사가
+    자기 가정을 다시 확인할 뿐이고, 진짜 원장에서는 모든 질의가 빈다."""
     rng = np.random.default_rng(seed)
     con = sqlite3.connect(":memory:")
+    con.row_factory = sqlite3.Row
     con.execute("CREATE TABLE price_daily (date TEXT, code TEXT, market TEXT, "
                 "close REAL, volume REAL, value REAL, PRIMARY KEY (date, code))")
     con.execute("CREATE TABLE index_daily (date TEXT, index_name TEXT, "
@@ -461,9 +499,9 @@ def _synthetic(effect: float = 0.0, months: int = 72, names: int = 200,
         # 뒤집힌다. 실제 시장에서는 맞는 이야기지만, 여기서 재려는 것은
         # 러너가 주어진 순위를 제대로 읽는가이지 그 되먹임이 아니다.
         val = 1.0e4 * vol / level
-        ds = d.strftime("%Y-%m-%d")
-        irows.append((ds, "KOSDAQ", float(mkt)))
-        rows += [(ds, codes[i], "KOSDAQ", float(px[i]), float(vol[i]), float(val[i]))
+        ds = d.strftime("%Y%m%d")                # KRX BAS_DD 그대로
+        irows.append((ds, D.BENCHMARK, float(mkt)))
+        rows += [(ds, codes[i], _MKT, float(px[i]), float(vol[i]), float(val[i]))
                  for i in range(names)]
     con.executemany("INSERT INTO price_daily VALUES (?,?,?,?,?,?)", rows)
     con.executemany("INSERT INTO index_daily VALUES (?,?,?)", irows)
@@ -737,6 +775,57 @@ def selftest() -> int:
         _assert(before == after)
     check("원장을 읽기만 한다", _reads_only)
 
+    # ── 원장의 말 (dialect) ───────────────────────────────────────────
+    #
+    # 여기가 합성 자료로 자기 자신을 검증하고 있던 자리다. 판단층 전체가
+    # 날짜를 `YYYY-MM-DD`, 시장·지수를 `"KOSDAQ"` 이라고 가정했고, 검사도 그
+    # 가정대로 표를 만들어 통과했다. 진짜 원장은 `"20260917"` · `"코스닥"`
+    # 이므로 모든 질의가 빈다 — 그리고 빈 결과는 '원장에 없습니다' 로 나간다.
+
+    def _fixture_is_the_real_dialect():
+        con = _synthetic(months=14, names=20, seed=5)     # 형식만 본다
+        d = con.execute("SELECT date, market FROM price_daily LIMIT 1").fetchone()
+        i = con.execute("SELECT index_name FROM index_daily LIMIT 1").fetchone()
+        con.close()
+        _assert(len(str(d[0])) == 8 and str(d[0]).isdigit(), d[0])
+        _assert(str(d[1]) == "코스닥", d[1])
+        _assert(str(i[0]) == "코스닥", i[0])
+    check("합성 원장이 진짜 원장의 형식이다", _fixture_is_the_real_dialect)
+
+    def _english_hint_finds_korean_ledger():
+        """사람은 `--market KOSDAQ` 으로 부른다. 원장은 한글로 적혀 있다."""
+        con = _synthetic(effect=0.03, seed=5)
+        r = run(con, "amihud2002", market="KOSDAQ", at="2026-09-18")
+        con.close()
+        _assert(r["universe"] == "코스닥", r["universe"])
+        _assert(r["observed"] is not None, r["reason"])
+    check("영문으로 불러도 한글 원장을 찾는다", _english_hint_finds_korean_ledger)
+
+    def _iso_ledger_also_works():
+        """형식이 바뀌어도 코드가 아니라 원장을 본다 — 물어보기 때문이다."""
+        con = _synthetic(effect=-0.03, ivol_spread=0.9, seed=5)
+        con.execute("UPDATE price_daily SET date = "
+                    "substr(date,1,4)||'-'||substr(date,5,2)||'-'||substr(date,7,2)")
+        con.execute("UPDATE index_daily SET date = "
+                    "substr(date,1,4)||'-'||substr(date,5,2)||'-'||substr(date,7,2)")
+        con.commit()
+        r = run(con, "ahxz2006", at="2026-09-18")         # 지수를 쓰는 경로
+        con.close()
+        _assert(r["observed"] is not None, r["reason"])
+        _assert(r["verdict"] == VERDICT_OK, r)
+    check("원장이 ISO 날짜여도 같은 판정이 나온다", _iso_ledger_also_works)
+
+    def _missing_market_says_what_is_there():
+        """못 찾으면 원장에 무엇이 있는지 적는다. '없습니다' 만으로는 자료가
+        없는 것인지 이름을 잘못 부른 것인지 구분되지 않는다."""
+        con = _synthetic(months=14, names=20, seed=5)    # 사유만 본다
+        r = run(con, "amihud2002", market="KOSPI", at="2026-09-18")
+        con.close()
+        _assert(r["verdict"] == VERDICT_NONE, r)
+        _assert("코스닥" in (r["reason"] or ""), r["reason"])
+    check("시장을 못 찾으면 원장에 있는 이름을 알려 준다",
+          _missing_market_says_what_is_there)
+
     for f in failed:
         print("  X  " + f, file=sys.stderr)
     print(f"replication {passed} passed, {len(failed)} failed")
@@ -753,13 +842,16 @@ if __name__ == "__main__":
     a = ap.parse_args()
     if not a.paper:
         sys.exit(selftest())
-    if a.db:
-        con = sqlite3.connect(a.db)
-    else:
-        sys.path.insert(0, str(__import__("pathlib").Path(__file__).resolve().parent.parent
-                              / "stock-monitor"))
-        import ki_monitor                                # noqa: E402
-        con = ki_monitor.connect()
+    import ki_ledger_mcp as M                            # noqa: E402
+    try:
+        # 읽기 전용으로 연다. 러너는 원장에 쓰지 않는다 (규칙 2) — 쓰기 가능
+        # 하게 열어 두면 그 규칙이 코드가 아니라 예의가 된다.
+        con = (sqlite3.connect(f"file:{a.db}?mode=ro", uri=True)
+               if a.db else M.open_ledger())
+    except M.Denied as e:
+        print(M._scrub(e), file=sys.stderr)
+        sys.exit(1)
+    con.row_factory = sqlite3.Row
     try:
         print(json.dumps(run(con, a.paper, a.market), ensure_ascii=False, indent=a.indent))
     finally:

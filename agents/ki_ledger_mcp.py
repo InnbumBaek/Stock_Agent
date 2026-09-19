@@ -26,8 +26,12 @@ import json
 import re
 import sqlite3
 import sys
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import dialect as D                                      # noqa: E402
 
 PROTOCOL = "2025-06-18"
 NAME = "ki-ledger"
@@ -78,9 +82,40 @@ def _code(v) -> str:
 
 
 def _market(v) -> str:
-    if v not in _MARKETS:
+    """부를 수 있는 시장 이름인가. 원장에 있는가는 여기서 묻지 않는다.
+
+    한글도 받는다 — 원장이 그렇게 적혀 있고(`MKT_NM`), 데스크가 원장에서 본
+    이름을 그대로 넣는 것이 자연스럽다. 아무 문자열이나 받지는 않는다:
+    이 서버가 도구 밖의 질의를 만들지 않는다는 성질이 여기서 선다."""
+    if not isinstance(v, str):
         raise Denied(f"시장은 {_MARKETS} 중 하나여야 합니다 (받은 값: {v!r})")
-    return v
+    if v.upper() in _MARKETS:
+        return v.upper()
+    for eng, aliases in D.MARKET_ALIASES.items():
+        if v in aliases:
+            return eng
+    raise Denied(f"시장은 {_MARKETS} 중 하나여야 합니다 (받은 값: {v!r})")
+
+
+def _in_ledger(con, hint: str) -> str:
+    """부르는 이름을 **원장에 적힌 이름**으로 바꾼다.
+
+    이것이 없으면 `"KOSDAQ"` 으로 물은 질의가 늘 0행을 내고, 그 0행이
+    '원장에 없습니다' 로 나간다 — 코드가 틀렸다는 말이 아니라 자료 탓으로."""
+    got, why = D.resolve_market(con, hint)
+    if got is None:
+        raise Denied(why)
+    return got
+
+
+def _iso_rows(rows: list, *cols) -> list:
+    """밖으로 내는 날짜는 ISO 다. 원장은 `"20260917"` 로 적지만, 봉투·대조·
+    리포트가 모두 ISO 를 쓴다. 여기서 원장 형식을 흘리면 두 형식이 섞인다."""
+    for r in rows:
+        for c in cols:
+            if r.get(c):
+                r[c] = D.iso_date(r[c])
+    return rows
 
 
 def _day(v, what="날짜"):
@@ -100,7 +135,9 @@ def _limit(v, default=250) -> int:
 
 def _bdays_between(a: str, b: str) -> int:
     """영업일 수. 공휴일은 모른다 — 그 사실을 숨기지 않고 이름에 남긴다."""
-    d0, d1 = datetime.fromisoformat(a).date(), datetime.fromisoformat(b).date()
+    d0, d1 = D.parse_date(a), D.parse_date(b)
+    if d0 is None or d1 is None:
+        return 0
     if d1 <= d0:
         return 0
     n, cur = 0, d0
@@ -122,7 +159,7 @@ def _envelope(rows, asof, *, source, note=None, reason=None,
         "ok": rows is not None,
         "source_grade": grade,
         "sources": [source],
-        "asof": asof,
+        "asof": D.iso_date(asof) if asof else asof,
         "stale_days": _bdays_between(asof, today) if asof else None,
         "stale_days_note": "주말만 제외한 값입니다 — 공휴일은 반영되지 않습니다",
         "as_of_query": today,
@@ -143,27 +180,32 @@ def _envelope(rows, asof, *, source, note=None, reason=None,
 
 def t_universe(con, market: str = "KOSDAQ", limit: int = None) -> dict:
     market, limit = _market(market), _limit(limit, 500)
+    market = _in_ledger(con, market)
     r = con.execute(
         "SELECT code, name, market, list_date FROM instruments "
         "WHERE market = ? ORDER BY code LIMIT ?", (market, limit)).fetchall()
-    asof = con.execute("SELECT MAX(date) FROM price_daily WHERE market = ?",
-                       (market,)).fetchone()[0]
-    return _envelope([dict(x) for x in r], asof, source="KRX/상장종목",
-                     market=market)
+    asof = con.execute(
+        f"SELECT MAX({D.sql_date('date')}) FROM price_daily WHERE market = ?",
+        (market,)).fetchone()[0]
+    return _envelope(_iso_rows([dict(x) for x in r], "list_date"), asof,
+                     source="KRX/상장종목", market=market)
 
 
 def t_price_series(con, code: str, start: str = None, end: str = None,
                    limit: int = None) -> dict:
     code, limit = _code(code), _limit(limit)
     start, end = _day(start, "start"), _day(end, "end")
-    q = "SELECT date, open, high, low, close, volume, value FROM price_daily WHERE code = ?"
+    # 구간은 원장의 형식으로 잰다. 맨눈 비교는 `"20260917" >= "2026-09-01"`
+    # 을 4번째 글자에서 판정해 같은 해 전체를 통과시킨다 (`dialect.sql_date`).
+    q = ("SELECT date, open, high, low, close, volume, value "
+         "FROM price_daily WHERE code = ?")
     p = [code]
     if start:
-        q += " AND date >= ?"; p.append(start)
+        q += f" AND {D.sql_date('date')} >= ?"; p.append(D.norm_date(start))
     if end:
-        q += " AND date <= ?"; p.append(end)
-    q += " ORDER BY date DESC LIMIT ?"; p.append(limit)
-    r = [dict(x) for x in con.execute(q, p).fetchall()]
+        q += f" AND {D.sql_date('date')} <= ?"; p.append(D.norm_date(end))
+    q += f" ORDER BY {D.sql_date('date')} DESC LIMIT ?"; p.append(limit)
+    r = _iso_rows([dict(x) for x in con.execute(q, p).fetchall()], "date")
     r.reverse()
     if not r:
         return _envelope(None, None, source="KRX/일별매매정보",
@@ -177,12 +219,13 @@ def t_facts(con, code: str) -> dict:
     code = _code(code)
     r = con.execute(
         "SELECT date, code, name, market, open, high, low, close, volume, value, "
-        "mktcap, shares FROM price_daily WHERE code = ? ORDER BY date DESC LIMIT 1",
+        f"mktcap, shares FROM price_daily WHERE code = ? "
+        f"ORDER BY {D.sql_date('date')} DESC LIMIT 1",
         (code,)).fetchone()
     if r is None:
         return _envelope(None, None, source="KRX/일별매매정보",
                          reason=f"{code} 이(가) 원장에 없습니다")
-    row = dict(r)
+    row = _iso_rows([dict(r)], "date")[0]
     return _envelope([row], row["date"], source="KRX/일별매매정보", code=code,
                      note="종가 기준입니다. 장중 값이 아닙니다.")
 
@@ -208,19 +251,25 @@ def t_disclosures(con, code: str, since: str = None, limit: int = None) -> dict:
     q = "SELECT rcept_no, code, rcept_dt, title, tags FROM disclosure WHERE code = ?"
     p = [code]
     if since:
-        q += " AND rcept_dt >= ?"; p.append(since)
-    q += " ORDER BY rcept_dt DESC LIMIT ?"; p.append(limit)
-    r = [dict(x) for x in con.execute(q, p).fetchall()]
+        q += f" AND {D.sql_date('rcept_dt')} >= ?"; p.append(D.norm_date(since))
+    q += f" ORDER BY {D.sql_date('rcept_dt')} DESC, rcept_no DESC LIMIT ?"
+    p.append(limit)
+    r = _iso_rows([dict(x) for x in con.execute(q, p).fetchall()], "rcept_dt")
     return _envelope(r, r[0]["rcept_dt"] if r else None, source="DART/공시목록",
                      code=code)
 
 
 def t_index_series(con, index_name: str = "KOSDAQ", limit: int = None) -> dict:
-    index_name, limit = _market(index_name), _limit(limit)
-    r = [dict(x) for x in con.execute(
-        "SELECT date, open, high, low, close FROM index_daily "
-        "WHERE index_name = ? ORDER BY date DESC LIMIT ?",
-        (index_name, limit)).fetchall()]
+    hint, limit = _market(index_name), _limit(limit)
+    # KRX 의 `IDX_NM` 은 한글이다. 영문을 그대로 넣으면 늘 0행이 나오고, 그
+    # 0행이 '지수가 원장에 없습니다' 로 나간다.
+    index_name, why = D.resolve_index(con, hint)
+    if index_name is None:
+        return _envelope(None, None, source="KRX/지수", reason=why)
+    r = _iso_rows([dict(x) for x in con.execute(
+        f"SELECT date, open, high, low, close FROM index_daily "
+        f"WHERE index_name = ? ORDER BY {D.sql_date('date')} DESC LIMIT ?",
+        (index_name, limit)).fetchall()], "date")
     r.reverse()
     if not r:
         return _envelope(None, None, source="KRX/지수",
@@ -236,8 +285,8 @@ def t_macro(con, key: str = None, limit: int = None) -> dict:
     p = []
     if key:
         q += " WHERE key = ?"; p.append(key)
-    q += " ORDER BY date DESC LIMIT ?"; p.append(limit)
-    r = [dict(x) for x in con.execute(q, p).fetchall()]
+    q += f" ORDER BY {D.sql_date('date')} DESC LIMIT ?"; p.append(limit)
+    r = _iso_rows([dict(x) for x in con.execute(q, p).fetchall()], "date")
     r.reverse()
     return _envelope(r, r[-1]["date"] if r else None,
                      source="한국은행 ECOS · FRED")
@@ -245,11 +294,11 @@ def t_macro(con, key: str = None, limit: int = None) -> dict:
 
 def t_staleness(con, market: str = "KOSDAQ") -> dict:
     """원장이 며칠 뒤처졌는가. 이것을 먼저 묻지 않으면 묵은 값을 새 값으로 읽는다."""
-    market = _market(market)
+    market = _in_ledger(con, _market(market))
     row = con.execute(
-        "SELECT MAX(date) AS last, COUNT(DISTINCT code) AS codes "
-        "FROM price_daily WHERE market = ?", (market,)).fetchone()
-    last = row["last"] if row else None
+        f"SELECT MAX({D.sql_date('date')}) AS last, COUNT(DISTINCT code) AS codes "
+        f"FROM price_daily WHERE market = ?", (market,)).fetchone()
+    last = D.iso_date(row["last"]) if row and row["last"] else None
     if not last:
         return _envelope(None, None, source="KRX/일별매매정보",
                          reason=f"{market} 일봉이 원장에 없습니다")
@@ -509,8 +558,22 @@ def serve(con, stdin=None, stdout=None) -> int:
 
 # ── 자체 검사 ─────────────────────────────────────────────────────────
 
-def _ledger(tmp: Path) -> Path:
-    """합성 원장 파일. 읽기 전용 연결을 진짜로 시험하려면 파일이어야 한다."""
+# 합성 원장이 쓸 시장·지수 이름. 진짜 원장이 쓰는 값이다 (`dialect`).
+_MKT = D.MARKET_ALIASES["KOSDAQ"][0]
+
+
+def _ledger(tmp: Path, iso: bool = False) -> Path:
+    """합성 원장 파일. 읽기 전용 연결을 진짜로 시험하려면 파일이어야 한다.
+
+    **진짜 원장의 형식으로 적는다** — 날짜는 `YYYYMMDD`, 시장·지수는 한글.
+    이 서버는 데스크가 원장을 보는 유일한 창이라, 여기서 형식을 잘못 짚으면
+    데스크 전원이 '원장에 없습니다'만 읽는다. 그리고 그것은 코드가 틀렸다는
+    말이 아니라 자료가 없다는 말로 회의에 올라간다.
+
+    `iso=True` 는 형식이 바뀐 원장을 흉내 낸다 — 짐작하지 않고 물어보는지
+    확인하는 용도다."""
+    _d = (lambda v: D.iso_date(v)) if iso else (lambda v: D.norm_date(v))
+    mkt = "KOSDAQ" if iso else _MKT
     p = tmp / "ki.sqlite"
     con = sqlite3.connect(p)
     con.executescript("""
@@ -534,16 +597,17 @@ def _ledger(tmp: Path) -> Path:
             con.execute("INSERT INTO price_daily (date, code, name, market, open, high,"
                         " low, close, volume, value, mktcap, shares) "
                         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-                        (d, c, "샘플", "KOSDAQ", 100.0, 110.0, 95.0, 100.0 + i,
+                        (_d(d), c, "샘플", mkt, 100.0, 110.0, 95.0, 100.0 + i,
                          1000.0, 100000.0, 1e11, 1e6))
         con.execute("INSERT INTO index_daily VALUES (?,?,?,?,?,?)",
-                    (d, "KOSDAQ", 800.0, 810.0, 790.0, 800.0 + i))
+                    (_d(d), mkt, 800.0, 810.0, 790.0, 800.0 + i))
     con.execute("INSERT INTO instruments (code, name, market, list_date) "
-                "VALUES ('000660','샘플','KOSDAQ','2015-01-02')")
+                "VALUES ('000660','샘플',?,?)", (mkt, _d("2015-01-02")))
     con.execute("INSERT INTO disclosure (rcept_no, code, rcept_dt, title, tags) "
-                "VALUES ('R1','000660','2026-09-10','전환가액의조정','refix')")
+                "VALUES ('R1','000660',?,'전환가액의조정','refix')", (_d("2026-09-10"),))
     con.execute("INSERT INTO fundamental VALUES ('000660','2026Q2','rev',1.0,'KRW','DART')")
-    con.execute("INSERT INTO macro_daily VALUES ('2026-09-11','base_rate',3.0,'%','ECOS')")
+    con.execute("INSERT INTO macro_daily VALUES (?,'base_rate',3.0,'%','ECOS')",
+                (_d("2026-09-11"),))
     con.commit(); con.close()
     return p
 
@@ -570,7 +634,8 @@ def selftest() -> int:
         def _readonly_connection():
             """연결 자체가 쓰기를 거절하는가 — 두 번째 겹."""
             try:
-                con.execute("INSERT INTO price_daily (date, code) VALUES ('2026-01-01','999999')")
+                con.execute("INSERT INTO price_daily (date, code) "
+                            "VALUES ('20260101','999999')")
                 con.commit()
             except sqlite3.OperationalError as e:
                 _assert("readonly" in str(e).lower(), str(e))
@@ -739,6 +804,82 @@ def selftest() -> int:
             _assert(lines[1]["error"]["code"] == -32700)
             _assert(len(lines[2]["result"]["tools"]) == 10)
         check("stdio 왕복이 성립한다 (깨진 줄에도 서버가 죽지 않는다)", _serve_roundtrip)
+
+        # ── 원장의 말 (dialect) ───────────────────────────────────────
+        #
+        # 이 서버는 데스크가 원장을 보는 **유일한 창**이다. 여기서 형식을
+        # 잘못 짚으면 데스크 전원이 '원장에 없습니다'만 읽고, 그 문장은
+        # 코드가 틀렸다는 뜻이 아니라 자료가 없다는 뜻으로 회의에 올라간다.
+
+        def _fixture_is_the_real_dialect():
+            raw = sqlite3.connect(path)
+            row = raw.execute("SELECT date, market FROM price_daily "
+                              "LIMIT 1").fetchone()
+            idx = raw.execute("SELECT index_name FROM index_daily "
+                              "LIMIT 1").fetchone()
+            raw.close()
+            _assert(str(row[0]) == "20260907", row[0])
+            _assert(str(row[1]) == "코스닥", row[1])
+            _assert(str(idx[0]) == "코스닥", idx[0])
+        check("합성 원장이 진짜 원장의 형식이다", _fixture_is_the_real_dialect)
+
+        def _english_name_finds_korean_rows():
+            """데스크는 `KOSDAQ` 으로 묻는다. 원장은 한글로 적혀 있다."""
+            u = t_universe(con, "KOSDAQ")
+            _assert(u["ok"] and u["n"] == 1, u)
+            _assert(u["market"] == "코스닥", u["market"])
+            st = t_staleness(con, "KOSDAQ")
+            _assert(st["ok"] and st["rows"][0]["last_date"] == "2026-09-11", st)
+            ix = t_index_series(con, "KOSDAQ")
+            _assert(ix["ok"] and ix["n"] == 5, ix)
+            _assert(ix["index_name"] == "코스닥", ix["index_name"])
+        check("영문으로 물어도 한글 원장을 찾는다", _english_name_finds_korean_rows)
+
+        def _korean_name_is_accepted_too():
+            _assert(t_universe(con, "코스닥")["ok"])
+            for bad in ("NASDAQ", "", None, 3, "코스닥; DROP TABLE price_daily"):
+                try:
+                    t_universe(con, bad)
+                except Denied:
+                    continue
+                raise AssertionError(f"이상한 시장이 통과했습니다: {bad!r}")
+        check("한글 이름도 받고, 아무 문자열이나 받지는 않는다",
+              _korean_name_is_accepted_too)
+
+        def _window_is_real_not_a_prefix_match():
+            """`"20260917" >= "2026-09-01"` 은 4번째 글자에서 판정된다 —
+            같은 해 전체가 통과한다."""
+            r = t_price_series(con, "000660", start="2026-09-10")
+            _assert(r["n"] == 2, [x["date"] for x in r["rows"]])
+            r2 = t_price_series(con, "000660", end="2026-09-08")
+            _assert(r2["n"] == 2, [x["date"] for x in r2["rows"]])
+            d = t_disclosures(con, "000660", since="2026-09-11")
+            _assert(d["n"] == 0, d["rows"])
+        check("구간이 진짜 구간이다 (앞자리 일치가 아니다)",
+              _window_is_real_not_a_prefix_match)
+
+        def _emits_iso_whatever_the_ledger_stores():
+            """밖으로 내는 날짜는 ISO 다. 원장 형식이 새어 나가면 봉투·대조가
+            두 형식으로 갈린다."""
+            import tempfile as _tf
+            with _tf.TemporaryDirectory() as d2:
+                for iso in (False, True):
+                    sub = Path(d2) / str(int(iso))
+                    sub.mkdir()
+                    q = open_ledger(_ledger(sub, iso=iso))
+                    try:
+                        _assert(t_facts(q, "000660")["asof"] == "2026-09-11")
+                        _assert(t_price_series(q, "000660")["rows"][-1]["date"]
+                                == "2026-09-11")
+                        _assert(t_universe(q, "KOSDAQ")["rows"][0]["list_date"]
+                                == "2015-01-02")
+                        _assert(t_disclosures(q, "000660")["rows"][0]["rcept_dt"]
+                                == "2026-09-10")
+                        _assert(t_macro(q)["rows"][-1]["date"] == "2026-09-11")
+                    finally:
+                        q.close()
+        check("원장 형식과 무관하게 ISO 로 낸다",
+              _emits_iso_whatever_the_ledger_stores)
 
         con.close()
 

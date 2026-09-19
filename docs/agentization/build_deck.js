@@ -810,7 +810,7 @@ function sRoadmap() {
     });
   });
 
-  const outs = [["코드로 끝난 것", "스키마 · 러너 · 관문 · 트리거 · 사이클 · 되짚기 — 자체 검사 240개", GRN],
+  const outs = [["코드로 끝난 것", "스키마 · 러너 · 관문 · 트리거 · 사이클 · 되짚기 — 자체 검사 273개", GRN],
                 ["원장이 있어야 되는 것", "12편 중 5편의 실제 재현 · 채택률 · 트리거 발생률 실측", AMB],
                 ["사람이 정할 것", "병행 2주 결과로 전환 여부 — 이 덱이 아니라 회의에서", MAG]];
   outs.forEach((o, i) => {
@@ -848,7 +848,7 @@ function sNext() {
   });
 
   mono(s, "성공 판정 지표", { x: 8.6, y: 1.62, w: 4.1, h: 0.28, fontSize: 12, bold: true, color: AMB, charSpacing: 1 });
-  const kpi = [["240개", "자체 검사", "키·네트워크·원장 없이 돈다", GRN],
+  const kpi = [["273개", "자체 검사", "키·네트워크·원장 없이 돈다", GRN],
                ["0줄", "ki_monitor.py 변경", "측정층은 손대지 않았다", CYN],
                ["8 / 12", "검정 대상 논문", "나머지 4편은 원래 대상 아님", AMB],
                ["0건", "미분류 논문", "전부 셋 중 하나로 분류됐다", MAG]];
@@ -890,7 +890,7 @@ function sExec() {
 
   const st = [["주 1회", "논문 사이클", "신규 + 재검 도래분"], ["N", "살아있는 논문", "고정값이 아니다"],
               ["7", "발행 게이트", "재현 관문 신설"], ["0", "원장 쓰기 권한", "에이전트는 못 쓴다"],
-              ["0줄", "ki_monitor.py 변경", "측정층은 그대로"], ["240개", "자체 검사", "키·망·원장 없이"]];
+              ["0줄", "ki_monitor.py 변경", "측정층은 그대로"], ["273개", "자체 검사", "키·망·원장 없이"]];
   st.forEach((t, i) => {
     const x = 8.72 + (i % 2) * 2.02, y = 1.82 + Math.floor(i / 2) * 1.42;
     panel(s, { x, y, w: 1.88, h: 1.3, fill: PANEL, line: EDGE });
@@ -1137,7 +1137,7 @@ function sStack() {
 
   panel(s, { x: M, y: 6.62, w: CW, h: 0.5, fill: PANEL3, line: EDGE });
   txt(s, [
-    { text: "실제로 들어간 것 — agents/ 파이썬 12개 · 데스크 정의 9 · 스킬 5 · 자체 검사 240개. ", options: { bold: true, color: GRN } },
+    { text: "실제로 들어간 것 — agents/ 파이썬 13개 · 데스크 정의 9 · 스킬 5 · 자체 검사 273개. ", options: { bold: true, color: GRN } },
     { text: "기존 코드 변경은 0줄이다. ki_monitor.py 는 열지 않았다.", options: { color: INK } },
   ], { x: M + 0.26, y: 6.62, w: CW - 0.52, h: 0.5, fontSize: 10.5, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
@@ -1211,6 +1211,7 @@ function sRisk() {
     ["치명·비가역", "원장 오염", "추정치가 ki.sqlite 에 한 번 들어가면 다음 측정이 오염되고 되돌릴 수 없다.", "MCP 에 쓰기 도구 미노출 + data-ops 단독 권한 + PreToolUse 훅 차단", PUR],
     ["중", "유사투자자문 규제", "권고 · 목표가를 생성하는 순간 산출물의 성격이 바뀐다.", "권고 미생성 원칙 유지 + 배포통제 배너(STAGE) + 내부 검토용 고지 유지", CYN],
     ["중", "비용 · 지연", "이벤트가 몰린 날에는 인스턴스가 급증한다 (시뮬 피크 95).", "T1~T3 등급 분리 · 인스턴스별 예산 상한 · 17:00 배치로 몰아서 실행", GRN],
+    ["높음", "합성 검증의 자기확인", "표를 만드는 쪽과 읽는 쪽이 같은 가정을 쓰면 둘 다 틀려도 통과한다. 검사 240개가 통과하는 동안 판단층은 진짜 원장에서 한 줄도 못 읽고 있었다.", "원장은 \"20260917\" · \"코스닥\" 이다 — dialect.py 가 짐작하지 않고 물어본다 + 합성 원장도 진짜 형식으로 + audit [11] 이 영문 이름을 금지", AMB],
   ];
   const head = ["등급", "리스크", "무엇이 문제인가", "완화"].map((h, i) => ({
     text: h, options: { bold: true, color: AMB, fill: { color: PANEL2 }, fontSize: 10.5, valign: "middle",
@@ -1229,14 +1230,14 @@ function sRisk() {
   s.addTable(body, {
     x: M, y: 1.90, w: CW, colW: [1.14, 2.32, 4.52, 4.11],
     border: { type: "solid", color: EDGE, pt: 1 },
-    fontFace: F, rowH: 0.60, margin: 0.07, autoPage: false,
+    fontFace: F, rowH: 0.545, margin: 0.06, autoPage: false,
   });
 
-  panel(s, { x: M, y: 6.24, w: CW, h: 0.62, fill: PANEL3, line: EDGE });
+  panel(s, { x: M, y: 6.30, w: CW, h: 0.56, fill: PANEL3, line: EDGE });
   txt(s, [
     { text: "자격증명 — ", options: { bold: true, color: GLD } },
     { text: "원본 압축본의 env.txt 에 6종 키가 평문으로 있었다. 파일명이 .env 가 아니어서 기존 .gitignore 어떤 규칙에도 걸리지 않는다. 저장소에는 넣지 않았고 규칙을 추가했다.", options: { color: INK } },
-  ], { x: M + 0.26, y: 6.24, w: CW - 0.52, h: 0.62, fontSize: 10.5, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
+  ], { x: M + 0.26, y: 6.30, w: CW - 0.52, h: 0.56, fontSize: 10.5, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
 
 /* ── NEW: 부록 — 파일 배치 ── */
@@ -1245,23 +1246,24 @@ function sAppendix() {
   header(s, "APPENDIX", "저장소에 추가되는 것 — 파일 배치",
          "기존 파일은 하나도 옮기지 않는다. 아래는 전부 새로 생기는 경로다.");
 
-  panel(s, { x: M, y: 1.90, w: 6.7, h: 4.6, fill: "0A1020", line: EDGE });
+  panel(s, { x: M, y: 1.90, w: 6.7, h: 4.95, fill: "0A1020", line: EDGE });
   mono(s, [
     'Stock_Agent/',
     '├─ stock-monitor/        ki_monitor.py 변경 0줄 · .papers.json v2',
-    '├─ docs/                 audit.py 에 정의 대조 [10] 추가',
+    '├─ docs/                 audit.py 에 정의 대조 [10] · 원장 방언 [11]',
     '├─ RUN_ALL · SCHEDULE    월 07:40 주간 재현 한 줄 추가',
     '│',
-    '├─ agents/               ← 들어감 (자체 검사 240개)',
+    '├─ agents/               ← 들어감 (자체 검사 273개)',
+    '│   ├─ dialect.py           원장의 말 (형식을 묻는다)  11',
     '│   ├─ envelope.py          봉투 스키마 · 검증기      28',
-    '│   ├─ papers.py            논문 장부 ki.papers/2    19',
-    '│   ├─ replication.py       분위 러너 (달력 시간)    25',
-    '│   ├─ eventstudy.py        이벤트 러너 (사건 시간)   16',
+    '│   ├─ papers.py            논문 장부 ki.papers/2    23',
+    '│   ├─ replication.py       분위 러너 (달력 시간)    29',
+    '│   ├─ eventstudy.py        이벤트 러너 (사건 시간)   19',
     '│   ├─ gates.py             게이트 ①~⑦ 검사기     20',
-    '│   ├─ ki_ledger_mcp.py     MCP 서버 · 읽기 10종   27',
-    '│   ├─ selftest.py          다섯 개를 한 번에',
-    '│   ├─ triggers.py          트리거 스캐너 · 소집      17',
-    '│   ├─ cycle.py             주간 논문 사이클         13',
+    '│   ├─ ki_ledger_mcp.py     MCP 서버 · 읽기 10종   32',
+    '│   ├─ selftest.py          열세 개를 한 번에',
+    '│   ├─ triggers.py          트리거 스캐너 · 소집      23',
+    '│   ├─ cycle.py             주간 논문 사이클         14',
     '│   ├─ run_day.py           소집 · 발행 · 승격        28',
     '│   ├─ reconcile.py         데스크 간 대조            15',
     '│   ├─ scorecard.py         계측 (고치지는 않는다)    16',
@@ -1281,7 +1283,7 @@ function sAppendix() {
     '    │   ├─ paper-adoption/     채택 · 감가 · 은퇴',
     '    │   └─ compliance-gate/    게이트 판정 기준',
     '    └─ settings.json        훅 · MCP 등록',
-  ].join("\n"), { x: M + 0.22, y: 2.02, w: 6.3, h: 4.36, fontSize: 8.0, color: "A9C8F0", lineSpacing: 10.4, valign: "top" });
+  ].join("\n"), { x: M + 0.22, y: 2.02, w: 6.3, h: 4.71, fontSize: 7.6, color: "A9C8F0", lineSpacing: 9.5, valign: "top" });
 
   const notes = [
     ["ki_monitor.py 는 열지 않는다", "CRLF 파일이라 편집 도구가 줄바꿈을 바꾸면 파일 전체가 diff 에 잡힌다. 감싸기만 하고 손대지 않는 이유이기도 하다.", GRN],
@@ -1296,7 +1298,7 @@ function sAppendix() {
     txt(s, n[0], { x: 8.0, y: y + 0.12, w: 4.5, h: 0.3, fontSize: 12, bold: true, color: n[2] });
     txt(s, n[1], { x: 7.74, y: y + 0.44, w: 4.76, h: 0.56, fontSize: 9.5, color: MUT });
   });
-  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 12 · 데스크 정의 9 · 스킬 5 · 자체 검사 240개 · ki_monitor.py 변경 0줄");
+  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 13 · 데스크 정의 9 · 스킬 5 · 자체 검사 273개 · ki_monitor.py 변경 0줄");
 }
 
 

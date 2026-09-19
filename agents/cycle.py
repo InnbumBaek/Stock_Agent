@@ -86,6 +86,27 @@ def run(con, ledger: dict, today: str = None, cap: int = RECHECK_CAP,
     picks = due(ledger, today, cap)
     out["picked"] = picks
 
+    # ②-b 소집되지 않는 것들을 센다.
+    #
+    # `scan_paper_rechecks` 는 `NOT_A_FACTOR` 를 아예 부르지 않는다. 부르지
+    # 않는 것은 맞다 — 소집해 봐야 계량역이 "이건 그런 물건이 아닙니다"를
+    # 매주 다시 쓴다. 그런데 부르지 않으면 아래 `picks` 순회에도 안 들어오고,
+    # 그 결과 사이클 보고의 `not_a_factor` 칸이 **영원히 비어 있었다.**
+    # 장부에는 네 편이 있는데 사이클은 그 네 편을 한 번도 언급하지 않는다 —
+    # '대상이 아니다'와 '장부에 없다'가 구분되지 않는다.
+    #
+    # 소집은 그대로 하지 않고, 세기만 한다.
+    picked = set(picks)
+    for key in sorted((ledger.get("papers") or {})):
+        if key in picked:
+            continue
+        pp = (ledger.get("papers") or {})[key]
+        if pp.get("state") == P.RETIRED:
+            continue                    # 은퇴본은 인용이 막혀 있다 — 셀 것이 없다
+        kind, why = R.reducibility(key)
+        if kind == "not_a_factor":
+            out["not_a_factor"].append({"paper": key, "why": why})
+
     for key in picks:
         kind, why = R.reducibility(key)
         if kind not in ("testable", "event_time"):
@@ -308,7 +329,11 @@ def selftest() -> int:
             _assert(after2["papers"]["가짜논문"]["replication"] == [])
         finally:
             R.NEEDS_RUNNER.pop("가짜논문", None)
-        check("분류마다 제 칸으로 간다 (빈 칸의 경로도 확인한다)",
+
+    # 이 `check` 는 한동안 `_buckets_route_correctly` 안쪽에 들여쓰여 있었다.
+    # 그래서 검사가 **등록조차 되지 않았다** — 정의는 있고 호출은 없으니
+    # 오류 한 줄 없이 통과 개수만 하나 적었다.
+    check("분류마다 제 칸으로 간다 (빈 칸의 경로도 확인한다)",
           _buckets_route_correctly)
 
     def _retired_not_revisited():

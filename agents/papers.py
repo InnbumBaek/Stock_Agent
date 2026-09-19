@@ -119,17 +119,29 @@ def record(doc: dict, key: str, rep: dict, at: str = None,
 
     p.setdefault("replication", []).append(rep)
     v = rep.get("verdict")
+    prev = p.get("state") or UNVERIFIED
     if v == "재현됨":
         p["state"], p["state_reason"] = ADOPTED, f"{at} 재현됨 (t={rep.get('observed', {}).get('t')})"
+        p["state_at"] = at
     elif v == "방향 반대":
         p["state"] = RETIRED
         p["state_reason"] = (f"{at} 우리 표본에서 논문과 반대 방향으로 유의. "
                              f"기록은 남기고 인용은 막는다.")
+        p["state_at"] = at
+    elif prev == RETIRED:
+        # 판정 불가는 **되살리지 못한다.** 은퇴는 '우리 표본에서 반대 방향으로
+        # 유의했다'는 측정 결과이고, '이번에는 못 쟀다'가 그것을 뒤집을 수는
+        # 없다. 상태도 사유도 그대로 두고 기록만 쌓는다 — 되살리면 인용이
+        # 다시 열리는데, 그 재개방의 근거가 '못 쟀다'가 된다.
+        pass
     else:
         # 판정 불가는 은퇴가 아니다. 표본이 얇거나 유의하지 않았을 뿐이다.
-        p["state"] = WARNED if p.get("state") == ADOPTED else UNVERIFIED
+        # 다만 **올리지도 않는다.** warned 를 unverified 로 되돌리면 '흔들린
+        # 적이 있다'가 '아직 해 본 적이 없다'로 바뀌어, 방금 돌려 보고도
+        # 안 돌려 본 것처럼 읽힌다.
+        p["state"] = WARNED if prev in (ADOPTED, WARNED) else UNVERIFIED
         p["state_reason"] = f"{at} 판정 불가 — {rep.get('reason') or '사유 없음'}"
-    p["state_at"] = at
+        p["state_at"] = at
     hl = half_life_d or p.get("half_life_d") or DEFAULT_HALF_LIFE_D
     p["half_life_d"] = hl
     p["recheck_due"] = (datetime.fromisoformat(at).date() + timedelta(days=hl)).isoformat()
@@ -445,6 +457,49 @@ def selftest() -> int:
         _assert(len(m["papers"]) == len(d["papers"]))
         _assert(all(p["state"] in STATES for p in m["papers"].values()))
     check("실제 장부가 이관된다", _real_ledger)
+
+    # ── 판정 불가는 상태를 되돌리지 못한다 ────────────────────────────
+    #
+    # '이번에는 못 쟀다'는 판정이 아니다. 그것이 이전 판정을 뒤집으면,
+    # 표본이 얇은 구간을 한 번 돌리는 것만으로 경고가 지워지고 은퇴가
+    # 풀린다 — 재개방의 근거가 '못 쟀다'가 된다.
+
+    def _none_verdict(reason="표본이 얇습니다"):
+        return {"schema": "ki.replication/1", "verdict": "판정 불가",
+                "observed": None, "reason": reason}
+
+    def _none_does_not_lift_warned():
+        d = migrate(_v1(), at="2026-01-01")
+        k = next(iter(d["papers"]))
+        d["papers"][k]["state"] = WARNED
+        d["papers"][k]["state_reason"] = "2026-03-01 흔들렸다"
+        out = record(d, k, _none_verdict(), at="2026-09-18")
+        _assert(out["papers"][k]["state"] == WARNED, out["papers"][k]["state"])
+    check("판정 불가는 warned 를 unverified 로 올리지 않는다",
+          _none_does_not_lift_warned)
+
+    def _none_does_not_revive_retired():
+        d = migrate(_v1(), at="2026-01-01")
+        k = next(iter(d["papers"]))
+        d["papers"][k]["state"] = RETIRED
+        d["papers"][k]["state_reason"] = "2026-03-01 우리 표본에서 반대 방향"
+        d["papers"][k]["state_at"] = "2026-03-01"
+        out = record(d, k, _none_verdict(), at="2026-09-18")
+        got = out["papers"][k]
+        _assert(got["state"] == RETIRED, got["state"])
+        _assert("반대 방향" in got["state_reason"], got["state_reason"])
+        _assert(got["state_at"] == "2026-03-01", got["state_at"])
+        _assert(len(got["replication"]) == 1, got["replication"])   # 기록은 쌓인다
+    check("판정 불가는 은퇴본을 되살리지 않는다", _none_does_not_revive_retired)
+
+    def _none_still_demotes_adopted():
+        """되돌리지 않는다는 것이 아무것도 안 한다는 뜻은 아니다."""
+        d = migrate(_v1(), at="2026-01-01")
+        k = next(iter(d["papers"]))
+        d["papers"][k]["state"] = ADOPTED
+        out = record(d, k, _none_verdict(), at="2026-09-18")
+        _assert(out["papers"][k]["state"] == WARNED, out["papers"][k]["state"])
+    check("판정 불가는 채택본을 경고로 내린다", _none_still_demotes_adopted)
 
     for f in failed:
         print("  X  " + f, file=sys.stderr)

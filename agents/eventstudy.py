@@ -27,7 +27,7 @@ import argparse
 import json
 import sqlite3
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -35,6 +35,7 @@ import pandas as pd
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import dialect as D                                      # noqa: E402
 import replication as R                                  # noqa: E402
 
 SCHEMA = "ki.eventstudy/1"
@@ -103,17 +104,33 @@ def _prices(con, market: str) -> pd.DataFrame:
                     "AND close > 0 ORDER BY code, date", (market,))
     if df.empty:
         return df
-    df["date"] = pd.to_datetime(df["date"])
+    df["date"] = pd.to_datetime(df["date"].map(D.norm_date), format="%Y%m%d")
     return df
 
 
-def _index(con, market: str) -> pd.Series:
+def _index(con, index_name: str) -> pd.Series:
+    """받는 것은 **원장에 적힌 지수 이름**이다 (`dialect.resolve_index`)."""
+    if not index_name:
+        return pd.Series(dtype=float)
     idx = _read(con, "SELECT date, close FROM index_daily WHERE index_name = ? "
-                     "ORDER BY date", (market,))
+                     "ORDER BY date", (index_name,))
     if idx.empty:
         return pd.Series(dtype=float)
     return pd.Series(idx["close"].to_numpy(dtype=float),
-                     index=pd.to_datetime(idx["date"]))
+                     index=pd.to_datetime(idx["date"].map(D.norm_date),
+                                          format="%Y%m%d"))
+
+
+def _parse_list_date(ld) -> "date | None":
+    """상장일을 읽는다. 못 읽으면 None — 지어내지 않는다 (규칙 3).
+
+    KRX `LIST_DD` 는 `"20170102"` 로 온다. `datetime.fromisoformat` 이 그
+    형식을 받아 주는 것은 파이썬 3.11 부터다. 3.10 에서는 전 종목이 조용히
+    빠지고 '상장일이 있는 종목이 없습니다' 로 나간다 — 원장은 멀쩡한데.
+
+    읽는 규칙은 `dialect` 한 곳에 있다. 여기서 따로 쓰면 읽는 쪽마다 받는
+    형식이 달라지고, 그 차이는 '어떤 종목만 빠진다'로만 보인다."""
+    return D.parse_date(ld)
 
 
 def _events(con, anchor: str, market: str) -> dict:
@@ -129,9 +146,8 @@ def _events(con, anchor: str, market: str) -> dict:
     for r in rows:
         code = r[0] if not hasattr(r, "keys") else r["code"]
         ld = r[1] if not hasattr(r, "keys") else r["list_date"]
-        try:
-            d = datetime.fromisoformat(str(ld)).date()
-        except (ValueError, TypeError):
+        d = _parse_list_date(ld)
+        if d is None:
             continue
         out[code] = d if anchor == "list_date" else _add_months(d, LOCKUP_MONTHS)
     return out
@@ -165,6 +181,12 @@ def _calendar_time(px: pd.DataFrame, idx: pd.Series, events: dict,
         return (np.array([]), len(n_used),
                 f"달력시간 포트폴리오가 {len(rows)}개월뿐입니다 "
                 f"({MIN_MONTHS}개월 이상 필요)")
+    # 달 수만 보면 안 된다. 세 종목짜리 포트폴리오도 36개월은 채운다 — 그때
+    # 나오는 t 는 그 세 종목 이야기이고, 논문 주장의 재현이 아니다.
+    if len(n_used) < MIN_EVENTS:
+        return (np.array([]), len(n_used),
+                f"포트폴리오에 들어온 종목이 {len(n_used)}개뿐입니다 "
+                f"({MIN_EVENTS}개 이상 필요)")
     return np.array(rows, dtype=float), len(n_used), None
 
 
@@ -224,16 +246,25 @@ def run(con, key: str, market: str = "KOSDAQ", t_min: float = T_MIN,
     out["claim"] = spec["claim"]
     out["method"] = spec["kind"]
 
-    px = _prices(con, market)
+    # 원장이 쓰는 말로 바꾼다 (`dialect`). 짐작하면 질의가 비고, 빈 결과는
+    # '자료가 없다' 로 나간다 — 코드가 틀렸다는 말이 아니라.
+    mkt_name, why = D.resolve_market(con, market)
+    if mkt_name is None:
+        out["reason"] = why
+        return out
+    out["universe"] = mkt_name
+
+    px = _prices(con, mkt_name)
     if px.empty:
-        out["reason"] = f"원장에 {market} 일봉이 없습니다"
+        out["reason"] = f"원장에 {mkt_name} 일봉이 없습니다"
         return out
-    idx = _index(con, market)
+    idx_name, why_idx = D.resolve_index(con, mkt_name)
+    idx = _index(con, idx_name)
     if idx.empty:
-        out["reason"] = (f"{market} 지수가 원장에 없습니다 — 초과수익의 기준선을 "
-                         f"만들 수 없습니다")
+        detail = why_idx or f"{idx_name} 지수가 원장에 없습니다"
+        out["reason"] = f"{detail} — 초과수익의 기준선을 만들 수 없습니다"
         return out
-    events = _events(con, spec["anchor"], market)
+    events = _events(con, spec["anchor"], mkt_name)
     if not events:
         out["reason"] = "상장일이 있는 종목이 없습니다 (instruments.list_date)"
         return out
@@ -269,12 +300,19 @@ def run(con, key: str, market: str = "KOSDAQ", t_min: float = T_MIN,
 
 # ── 자체 검사 ─────────────────────────────────────────────────────────
 
+# 합성 원장이 쓸 시장 이름. 진짜 원장이 쓰는 값이다 (`dialect`).
+_MKT = D.MARKET_ALIASES["KOSDAQ"][0]
+
+
 def _synth(effect: float = 0.0, names: int = 120, years: int = 9,
            seed: int = 3, window_effect: float = 0.0) -> sqlite3.Connection:
     """합성 원장. 상장일을 흩뿌리고 그 뒤 구간에만 효과를 싣는다.
 
     effect 는 상장 후 36개월 동안의 **월간** 초과수익이고, window_effect 는
-    보호예수 해제일 ±5영업일에 한 번 실리는 초과수익이다."""
+    보호예수 해제일 ±5영업일에 한 번 실리는 초과수익이다.
+
+    **진짜 원장의 형식으로 만든다** — 날짜·상장일은 `YYYYMMDD`, 시장과 지수는
+    한글이다. 영문·ISO 로 만들면 검사가 자기 가정을 다시 확인할 뿐이다."""
     rng = np.random.default_rng(seed)
     con = sqlite3.connect(":memory:")
     con.row_factory = sqlite3.Row
@@ -309,14 +347,14 @@ def _synth(effect: float = 0.0, names: int = 120, years: int = 9,
                 drift[i] += window_effect / 11.0
         r = rng.normal(0.0, 0.018, size=names) + mr + drift
         px = np.maximum(px * (1.0 + r), 100.0)
-        ds = d.strftime("%Y-%m-%d")
-        irows.append((ds, "KOSDAQ", float(mkt)))
-        rows += [(ds, codes[i], "KOSDAQ", float(px[i])) for i in range(names)
+        ds = d.strftime("%Y%m%d")                # KRX BAS_DD 그대로
+        irows.append((ds, D.BENCHMARK, float(mkt)))
+        rows += [(ds, codes[i], _MKT, float(px[i])) for i in range(names)
                  if d >= listed[i]]
     con.executemany("INSERT INTO price_daily VALUES (?,?,?,?)", rows)
     con.executemany("INSERT INTO index_daily VALUES (?,?,?)", irows)
     con.executemany("INSERT INTO instruments VALUES (?,?,?,?)",
-                    [(codes[i], "샘플", "KOSDAQ", listed[i].strftime("%Y-%m-%d"))
+                    [(codes[i], "샘플", _MKT, listed[i].strftime("%Y%m%d"))
                      for i in range(names)])
     con.commit()
     return con
@@ -462,6 +500,46 @@ def selftest() -> int:
         con.close()
         _assert(a["at"] != b["at"] and a["observed"] == b["observed"])
     check("판정일은 분석 기준일이다", _at_is_analysis_date)
+
+    # ── 원장의 말 (dialect) ───────────────────────────────────────────
+    #
+    # 아래 셋은 합성 자료로 검증하다 자기 가정을 다시 확인하고 있던 자리다.
+    # 원장은 날짜를 `YYYYMMDD`, 시장·지수를 한글로 적는다. 판단층이 영문·ISO
+    # 를 박아 두면 진짜 원장에서 **모든 질의가 빈다.** 그리고 빈 결과는
+    # '원장에 없습니다' 로 나간다 — 코드가 틀렸다는 말이 아니라.
+
+    def _reads_the_real_ledger_dialect():
+        con = _synth(effect=-0.02, seed=5)
+        d = con.execute("SELECT date, market FROM price_daily LIMIT 1").fetchone()
+        _assert(len(str(d[0])) == 8 and str(d[0]).isdigit(), d[0])
+        _assert(str(d[1]) == "코스닥", d[1])
+        r = run(con, "ritter1991", market="KOSDAQ", at="2026-09-18")
+        con.close()
+        _assert(r["universe"] == "코스닥", r["universe"])   # 해소된 이름을 적는다
+        _assert(r["observed"] is not None, r["reason"])
+    check("원장이 한글·YYYYMMDD 여도 읽는다", _reads_the_real_ledger_dialect)
+
+    def _list_date_compact():
+        """KRX LIST_DD 는 `20170102` 다. 3.10 의 fromisoformat 은 이것을
+        못 읽고, 그러면 전 종목이 조용히 빠진다."""
+        _assert(_parse_list_date("20170102").isoformat() == "2017-01-02")
+        _assert(_parse_list_date("2017-01-02").isoformat() == "2017-01-02")
+        _assert(_parse_list_date("") is None)
+        _assert(_parse_list_date(None) is None)
+        _assert(_parse_list_date("2017/01/02") is None)   # 지어내지 않는다
+        _assert(_parse_list_date("20171332") is None)     # 없는 날
+    check("상장일을 너그럽게, 그러나 지어내지 않고 읽는다", _list_date_compact)
+
+    def _calendar_time_needs_enough_names():
+        """달 수만 보면 세 종목짜리 포트폴리오도 36개월을 채운다. 그때 나오는
+        t 는 그 세 종목 이야기이지 논문 주장의 재현이 아니다."""
+        con = _synth(effect=-0.02, names=3, years=9, seed=3)
+        r = run(con, "ritter1991", at="2026-09-18")
+        con.close()
+        _assert(r["verdict"] == R.VERDICT_NONE, r)
+        _assert(r["observed"] is None, r)
+        _assert(str(MIN_EVENTS) in (r["reason"] or ""), r["reason"])
+    check("달력시간도 최소 종목 수를 건다", _calendar_time_needs_enough_names)
 
     for f in failed:
         print("  X  " + f, file=sys.stderr)
