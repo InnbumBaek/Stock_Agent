@@ -27,12 +27,17 @@ from pathlib import Path
 MONITOR = Path(__file__).resolve().parent.parent / "stock-monitor"
 
 # 측정층이 쓰는 기준 지수 이름. 가져오지 못하면 KRX 가 주는 값을 그대로 쓴다.
+# 시장마다 기준 지수가 다르다. 이 지도는 측정층이 이미 갖고 있다
+# (`FACTS_BENCH`) — 여기서 따로 쓰면 두 층이 다른 지수를 기준선으로 삼는다.
+_FALLBACK_BENCH = {"KOSPI": "코스피", "KOSDAQ": "코스닥", "KONEX": "코넥스"}
 try:
     sys.path.insert(0, str(MONITOR))
     import ki_monitor as _K                              # noqa: PLC0415
     BENCHMARK = getattr(_K, "BENCHMARK", "코스닥")
+    BENCH_OF = dict(getattr(_K, "FACTS_BENCH", _FALLBACK_BENCH))
 except Exception:                                        # noqa: BLE001
     BENCHMARK = "코스닥"
+    BENCH_OF = dict(_FALLBACK_BENCH)
 
 # 사람이 부르는 이름 → 원장에 적힐 법한 이름. 원장에 물어보는 것이 먼저이고,
 # 이것은 물어볼 수 없을 때의 차선이다.
@@ -42,22 +47,54 @@ MARKET_ALIASES = {
     "KONEX": ("코넥스", "KONEX"),
 }
 
+
+def canonical(hint: str) -> str | None:
+    """부르는 이름을 영문 열쇠로. 한글로 불러도 같은 자리에 닿아야 한다.
+
+    `MARKET_ALIASES` 를 영문 열쇠로만 뒤지면 `"코스피"` 는 어디에도 걸리지
+    않는다. 그러면 `resolve_*` 가 '못 찾았다'로 가고, 원장에 멀쩡히 있는
+    유가증권이 없는 것이 된다."""
+    if not isinstance(hint, str) or not hint.strip():
+        return None
+    h = hint.strip()
+    if h.upper() in MARKET_ALIASES:
+        return h.upper()
+    for eng, aliases in MARKET_ALIASES.items():
+        if h in aliases:
+            return eng
+    return None
+
+# 표가 비었을 때 사람이 읽을 말. 사유는 데스크와 리포트로 나간다 — 거기에
+# 표 이름(`price_daily`)이 그대로 뜨면, 읽는 사람은 자기가 무엇을 못 받았는지
+# 모른다. 검사가 이 문구를 본다 (eventstudy `_missing_tables`).
+_EMPTY_WHY = {
+    "price_daily": "원장에 일봉이 없습니다",
+    "instruments": "원장에 종목 목록이 없습니다",
+    "index_daily": "원장에 지수가 없습니다",
+}
+
 _COMPACT = re.compile(r"^\d{8}$")
 _ISO = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 def norm_date(d: str) -> str:
-    """어떤 형식으로 오든 `YYYYMMDD` 로. 대시만 떼면 된다."""
-    s = str(d or "").strip()
-    return s.replace("-", "") if _ISO.match(s) else s
+    """어떤 형식으로 오든 `YYYYMMDD` 로.
+
+    대시만 떼는 것으로는 모자란다. `macro_daily` 에는 FRED 를 거친
+    `"2026-09-11 00:00:00"` 이 들어 있고, 그 행은 대시를 떼도 여덟 자리가
+    아니다. 못 읽는 값은 그대로 돌려준다 — 지어내지 않는다 (규칙 3)."""
+    got = parse_date(d)
+    return got.strftime("%Y%m%d") if got else str(d or "").strip()
 
 
 def iso_date(d: str) -> str:
-    """사람과 봉투가 읽는 `YYYY-MM-DD` 로."""
-    s = str(d or "").strip()
-    if _COMPACT.match(s):
-        return f"{s[:4]}-{s[4:6]}-{s[6:]}"
-    return s
+    """사람과 봉투가 읽는 `YYYY-MM-DD` 로.
+
+    봉투 검사(`envelope.validate`)는 `asof` 가 정확히 `YYYY-MM-DD` 이기를
+    요구한다. 시각이 붙은 값을 그대로 흘리면 데스크가 게이트에서 반려되고,
+    사유는 '날짜 형식'이라 원장이 원인이라는 것이 보이지 않는다."""
+    got = parse_date(d)
+    return got.isoformat() if got else str(d or "").strip()
 
 
 def parse_date(v) -> "_date | None":
@@ -88,7 +125,17 @@ def sql_date(col: str) -> str:
     7일 창이 조용히 '올해 전체'가 된다. 그 결과가 '없음'이면 차라리 낫다.
     실제로는 여덟 달 전 -40% 하락이 **오늘의 소집**으로 올라왔다.
 
-    색인을 타지 못하지만, 이 스캐너들은 어차피 전수 정렬을 한다."""
+    **색인을 타지 못한다. 그 값을 재 봤다** (60만 행 · 300종목 × 8년):
+
+        t_facts 한 줄 조회      맨눈 0.0ms  →  2.9ms
+        MAX(date)              맨눈 0.0ms  → 142.9ms
+
+    그래도 이 식을 쓴다. 칸이 한 형식인지 물어보고 갈라 쓰면 빨라지지만,
+    그 '물어보기'가 또 한 번의 전수 조회이고 연결마다 캐시를 들고 다녀야
+    한다. 방금 고친 결함들이 전부 **형식을 안다고 가정한 데서** 나왔다 —
+    하루 아홉 데스크가 한 번씩 부르는 자리에서 143ms 를 아끼자고 같은 종류의
+    가정을 다시 들이지 않는다. 원장이 1,700종목으로 커져 이 값이 문제가 되면,
+    그때는 측정층에 정규화된 칸을 두는 것이 답이지 판단층의 추측이 아니다."""
     return f"substr(replace({col}, '-', ''), 1, 8)"
 
 
@@ -119,25 +166,34 @@ def _distinct(con, table: str, col: str) -> list:
 
 
 def _pick(have: list, hint: str) -> str | None:
-    """원장이 실제로 가진 값 중에서 고른다. 없는 이름을 지어내지 않는다."""
+    """원장이 실제로 가진 값 중에서 고른다. 없는 이름을 지어내지 않는다.
+
+    별칭은 영문·한글 어느 쪽으로 불러도 같은 묶음에 닿아야 한다 — 원장은
+    한글로 적혀 있고, 사람은 원장에서 본 이름을 그대로 넣는다."""
     if not hint:
         return None
     if hint in have:
         return hint
-    for alias in MARKET_ALIASES.get(hint.upper(), ()):
+    key = canonical(hint)
+    aliases = MARKET_ALIASES.get(key, ()) if key else (hint,)
+    for alias in aliases:
         if alias in have:
             return alias
     # 부분 일치 — '코스닥 (외국주포함)' 같은 변형을 위해서다. 짧은 것이 본체다.
-    cands = [h for a in MARKET_ALIASES.get(hint.upper(), (hint,))
-             for h in have if a and a in h]
+    cands = [h for a in aliases for h in have if a and a in h]
     return min(cands, key=len) if cands else None
 
 
-def resolve_market(con, hint: str = "KOSDAQ") -> tuple[str | None, str | None]:
-    """시장 이름을 원장에 맞춘다. (이름, 사유) — 못 찾으면 이름이 None 이다."""
-    have = _distinct(con, "price_daily", "market")
+def resolve_market(con, hint: str = "KOSDAQ",
+                   table: str = "price_daily") -> tuple[str | None, str | None]:
+    """시장 이름을 원장에 맞춘다. (이름, 사유) — 못 찾으면 이름이 None 이다.
+
+    `table` 은 **부르는 쪽이 실제로 읽을 표**다. 종목 목록을 물으면서 일봉
+    표에 물어보면, 수집이 `instruments` 까지만 끝난 상태에서 멀쩡히 있는
+    종목이 '없다'가 된다."""
+    have = _distinct(con, table, "market")
     if not have:
-        return None, "원장에 일봉이 없습니다"
+        return None, _EMPTY_WHY.get(table, f"원장의 {table} 가 비어 있습니다")
     got = _pick(have, hint)
     if got is None:
         return None, (f"{hint!r} 에 해당하는 시장이 원장에 없습니다. "
@@ -146,17 +202,32 @@ def resolve_market(con, hint: str = "KOSDAQ") -> tuple[str | None, str | None]:
 
 
 def resolve_index(con, market: str = None) -> tuple[str | None, str | None]:
-    """지수 이름을 원장에 맞춘다.
+    """그 시장의 기준 지수를 원장에 맞춘다.
 
     KRX 는 `IDX_NM` 을 한글로 준다. 여기서 영문을 넣으면 질의가 늘 비고, 그
-    빈 결과가 "지수가 원장에 없습니다" 로 나가 자료 탓이 된다."""
+    빈 결과가 "지수가 원장에 없습니다" 로 나가 자료 탓이 된다.
+
+    **다른 시장의 지수로 대신하지 않는다.** 유가증권 종목을 코스닥 지수에
+    대고 재면 초과수익이 통째로 다른 값이 되는데, 그 결과에는 아무 표시도
+    붙지 않는다 — 판정까지 정상으로 나온다. 조용히 틀리는 쪽이다. 찾지
+    못하면 무엇을 찾았고 원장에 무엇이 있는지 적고 None 을 낸다."""
     have = _distinct(con, "index_daily", "index_name")
     if not have:
         return None, "원장에 지수가 없습니다"
-    for hint in (market, BENCHMARK, "KOSDAQ"):
-        got = _pick(have, hint) if hint else None
-        if got:
-            return got, None
+    key = canonical(market) if market else None
+    want = (BENCH_OF.get(key) if key else None) or market
+    # `want` 가 비는 경우는 없다 — 아는 시장이 아니거나 지도에 빠져 있으면
+    # 부른 이름 그대로 찾는다. 지어내지도, 옆 시장으로 갈아타지도 않는다.
+    got = _pick(have, want) if want else None
+    if got:
+        return got, None
+    if market:
+        return None, (f"{market} 의 기준 지수({want})가 원장에 없습니다. "
+                      f"원장에 있는 것: {', '.join(sorted(have)[:5])}")
+    # 시장을 말하지 않았을 때만 측정층의 기준 지수로 간다.
+    got = _pick(have, BENCHMARK)
+    if got:
+        return got, None
     return None, (f"기준 지수를 찾지 못했습니다. 원장에 있는 것: "
                   f"{', '.join(sorted(have)[:5])}")
 
@@ -234,6 +305,11 @@ def selftest() -> int:
         _assert(iso_date("20260917") == "2026-09-17")
         _assert(iso_date("2026-09-17") == "2026-09-17")
         _assert(norm_date(None) == "" and iso_date("") == "")
+        # FRED 를 거친 macro_daily 행. 이것이 봉투로 새면 게이트가 반려한다.
+        _assert(norm_date("2026-09-11 00:00:00") == "20260911")
+        _assert(iso_date("2026-09-11 00:00:00") == "2026-09-11")
+        # 못 읽는 값은 그대로 둔다 — 지어내지 않는다
+        _assert(iso_date("미상") == "미상" and norm_date("미상") == "미상")
     check("날짜를 양방향으로 바꾼다", _date_both_ways)
 
     def _style_is_asked_not_guessed():
@@ -275,6 +351,72 @@ def selftest() -> int:
         con.close()
     check("이름 변형이 있어도 본체를 고른다", _variant_picks_the_shorter)
 
+    def _index_never_falls_back_to_another_market():
+        """유가증권 종목을 코스닥 지수에 대고 재면 초과수익이 통째로 다른
+        값이 되는데, 그 결과에는 아무 표시도 붙지 않는다. 판정까지 정상으로
+        나온다 — 이 모듈이 막으려는 바로 그 실패다."""
+        import sqlite3
+        con = sqlite3.connect(":memory:")
+        con.executescript("""
+        CREATE TABLE price_daily (date TEXT, code TEXT, market TEXT, close REAL);
+        CREATE TABLE index_daily (date TEXT, index_name TEXT, close REAL);
+        """)
+        con.executemany("INSERT INTO price_daily VALUES (?,?,?,?)",
+                        [("20260917", "000660", "코스닥", 1.0),
+                         ("20260917", "005930", "유가증권", 2.0)])
+        con.executemany("INSERT INTO index_daily VALUES (?,?,?)",
+                        [("20260917", "코스닥", 800.0),
+                         ("20260917", "코스피", 2500.0)])
+        con.commit()
+        _assert(resolve_index(con, "유가증권") == ("코스피", None),
+                resolve_index(con, "유가증권"))
+        _assert(resolve_index(con, "KOSPI") == ("코스피", None))
+        _assert(resolve_index(con, "코스닥") == ("코스닥", None))
+        # 그 시장의 지수가 없으면 옆 시장 것으로 대신하지 않는다
+        con.execute("DELETE FROM index_daily WHERE index_name = '코스피'")
+        con.commit()
+        got, why = resolve_index(con, "유가증권")
+        _assert(got is None, got)
+        _assert("코스피" in why and "코스닥" in why, why)
+        con.close()
+    check("다른 시장의 지수로 대신하지 않는다",
+          _index_never_falls_back_to_another_market)
+
+    def _korean_hint_resolves_too():
+        """원장은 '유가증권' 으로 적는데 사람은 '코스피' 라고 부른다."""
+        con = _fixture(market="유가증권", index="코스피")
+        _assert(resolve_market(con, "코스피") == ("유가증권", None),
+                resolve_market(con, "코스피"))
+        _assert(resolve_market(con, "KOSPI")[0] == "유가증권")
+        _assert(canonical("코스피") == "KOSPI" and canonical("유가증권") == "KOSPI")
+        _assert(canonical("코스닥") == "KOSDAQ" and canonical("없는시장") is None)
+        con.close()
+    check("한글로 불러도 같은 자리에 닿는다", _korean_hint_resolves_too)
+
+    def _bench_map_comes_from_the_measurement_layer():
+        """시장마다 기준 지수가 다르다. 그 지도는 측정층이 이미 갖고 있다."""
+        _assert(BENCH_OF.get("KOSPI") == "코스피", BENCH_OF)
+        _assert(BENCH_OF.get("KOSDAQ") == "코스닥", BENCH_OF)
+    check("기준 지수 지도를 측정층에서 가져온다",
+          _bench_map_comes_from_the_measurement_layer)
+
+    def _resolve_market_asks_the_right_table():
+        """종목 목록을 물으면서 일봉 표에 물어보면, 수집이 instruments 까지만
+        끝난 상태에서 멀쩡히 있는 종목이 '없다'가 된다."""
+        import sqlite3
+        con = sqlite3.connect(":memory:")
+        con.executescript("""
+        CREATE TABLE price_daily (date TEXT, market TEXT);
+        CREATE TABLE instruments (code TEXT, market TEXT);
+        """)
+        con.execute("INSERT INTO instruments VALUES ('000660','코스닥')")
+        con.commit()
+        _assert(resolve_market(con, "KOSDAQ", table="instruments")
+                == ("코스닥", None))
+        _assert(resolve_market(con, "KOSDAQ")[0] is None)   # 일봉은 아직 비었다
+        con.close()
+    check("읽을 표에 물어본다", _resolve_market_asks_the_right_table)
+
     def _missing_says_what_is_there():
         con = _fixture(market="유가증권", index="코스피")
         got, why = resolve_market(con, "KOSDAQ")
@@ -287,7 +429,13 @@ def selftest() -> int:
         con = sqlite3.connect(":memory:")
         con.executescript("CREATE TABLE price_daily (date TEXT, market TEXT);"
                           "CREATE TABLE index_daily (date TEXT, index_name TEXT);")
-        _assert(resolve_market(con, "KOSDAQ") == (None, "원장에 일봉이 없습니다"))
+        got, why = resolve_market(con, "KOSDAQ")
+        # 사유는 사람이 읽는다 — 표 이름(`price_daily`)이 그대로 뜨면
+        # 무엇을 못 받았는지 모른다.
+        _assert(got is None and "일봉" in why, (got, why))
+        _assert("price_daily" not in why, why)
+        got2, why2 = resolve_market(con, "KOSDAQ", table="instruments")
+        _assert(got2 is None and "종목 목록" in why2, (got2, why2))
         _assert(resolve_index(con)[0] is None)
         _assert(date_style(con) == "compact")            # 못 물어보면 기본값
         con.close()

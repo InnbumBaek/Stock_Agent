@@ -97,15 +97,21 @@ def _market(v) -> str:
     raise Denied(f"시장은 {_MARKETS} 중 하나여야 합니다 (받은 값: {v!r})")
 
 
-def _in_ledger(con, hint: str) -> str:
-    """부르는 이름을 **원장에 적힌 이름**으로 바꾼다.
+def _in_ledger(con, hint: str,
+               table: str = "price_daily") -> tuple[str | None, str | None]:
+    """부르는 이름을 **원장에 적힌 이름**으로 바꾼다. (이름, 사유)
 
     이것이 없으면 `"KOSDAQ"` 으로 물은 질의가 늘 0행을 내고, 그 0행이
-    '원장에 없습니다' 로 나간다 — 코드가 틀렸다는 말이 아니라 자료 탓으로."""
-    got, why = D.resolve_market(con, hint)
-    if got is None:
-        raise Denied(why)
-    return got
+    '원장에 없습니다' 로 나간다 — 코드가 틀렸다는 말이 아니라 자료 탓으로.
+
+    **거절하지 않는다.** `Denied` 는 '부를 수 없는 요청'이라는 뜻이고, 원장이
+    비어 있는 것은 그것이 아니다. 도구마다 자기 사유 봉투가 있으므로 그쪽이
+    말하게 둔다 — 프로토콜 오류로 나가면 데스크가 사유를 읽지 못한다.
+
+    `table` 은 그 도구가 실제로 읽는 표다. 종목 목록을 물으면서 일봉 표에
+    물어보면, 수집이 `instruments` 까지만 끝난 상태에서 멀쩡히 있는 종목이
+    '없다'가 된다."""
+    return D.resolve_market(con, hint, table=table)
 
 
 def _iso_rows(rows: list, *cols) -> list:
@@ -180,7 +186,12 @@ def _envelope(rows, asof, *, source, note=None, reason=None,
 
 def t_universe(con, market: str = "KOSDAQ", limit: int = None) -> dict:
     market, limit = _market(market), _limit(limit, 500)
-    market = _in_ledger(con, market)
+    # 종목 목록은 `instruments` 에서 나온다 — 거기에 물어본다.
+    market, why = _in_ledger(con, market, table="instruments")
+    if market is None:
+        return _envelope(None, None, source="KRX/상장종목",
+                         reason=f"{why} ingest --universe <시장> 을 먼저 "
+                                f"실행하십시오.")
     r = con.execute(
         "SELECT code, name, market, list_date FROM instruments "
         "WHERE market = ? ORDER BY code LIMIT ?", (market, limit)).fetchall()
@@ -294,7 +305,11 @@ def t_macro(con, key: str = None, limit: int = None) -> dict:
 
 def t_staleness(con, market: str = "KOSDAQ") -> dict:
     """원장이 며칠 뒤처졌는가. 이것을 먼저 묻지 않으면 묵은 값을 새 값으로 읽는다."""
-    market = _in_ledger(con, _market(market))
+    market, why = _in_ledger(con, _market(market))
+    if market is None:
+        return _envelope(None, None, source="KRX/일별매매정보",
+                         reason=f"{why} ingest --universe <시장> 을 먼저 "
+                                f"실행하십시오.")
     row = con.execute(
         f"SELECT MAX({D.sql_date('date')}) AS last, COUNT(DISTINCT code) AS codes "
         f"FROM price_daily WHERE market = ?", (market,)).fetchone()
@@ -880,6 +895,61 @@ def selftest() -> int:
                         q.close()
         check("원장 형식과 무관하게 ISO 로 낸다",
               _emits_iso_whatever_the_ledger_stores)
+
+        def _fred_datetime_does_not_leak():
+            """`macro_daily` 에는 FRED 를 거친 `"2026-09-11 00:00:00"` 이
+            들어 있다. 그대로 흘리면 `envelope.validate` 가 asof 를 반려하고,
+            사유는 '날짜 형식'이라 원장이 원인이라는 것이 보이지 않는다."""
+            import tempfile as _tf
+            import envelope as _E
+            with _tf.TemporaryDirectory() as d3:
+                q_path = _ledger(Path(d3))
+                w = sqlite3.connect(q_path)
+                w.execute("INSERT INTO macro_daily VALUES "
+                          "('2026-09-12 00:00:00','fred_k',1.0,'%','FRED')")
+                w.commit(); w.close()
+                q = open_ledger(q_path)
+                try:
+                    r = t_macro(q)
+                    _assert(r["asof"] == "2026-09-12", r["asof"])
+                    _assert(r["rows"][-1]["date"] == "2026-09-12", r["rows"][-1])
+                    # 봉투 검사가 실제로 받는지까지 본다
+                    env = {"schema": "ki.envelope/2", "desk": "q4-timing",
+                           "at": "2026-09-19", "measure": "기준금리",
+                           "value": 3.0, "unit": "%", "asof": r["asof"],
+                           "source_grade": "1차", "sources": ["한국은행 ECOS"],
+                           "assumptions": ["a"], "limits": ["l"], "read": [],
+                           "spent": {"tool_calls": 1}, "attempt": 1,
+                           "instance": "i"}
+                    bad = [x for x in _E.validate(env) if "asof" in x]
+                    _assert(not bad, bad)
+                finally:
+                    q.close()
+        check("FRED 의 시각 붙은 날짜가 봉투로 새지 않는다",
+              _fred_datetime_does_not_leak)
+
+        def _empty_price_table_is_a_reason_not_a_protocol_error():
+            """도구마다 자기 '없습니다' 봉투가 있다. 여기서 Denied 를 던지면
+            그 가지가 죽고 데스크는 사유를 못 읽는다. 그리고 수집이
+            instruments 까지만 끝난 상태에서 universe 가 거절되면, 멀쩡히
+            있는 종목이 '없다'가 된다."""
+            import tempfile as _tf
+            with _tf.TemporaryDirectory() as d4:
+                q_path = _ledger(Path(d4))
+                w = sqlite3.connect(q_path)
+                w.execute("DELETE FROM price_daily")
+                w.commit(); w.close()
+                q = open_ledger(q_path)
+                try:
+                    st = t_staleness(q, "KOSDAQ")
+                    _assert(st["ok"] is False and st["reason"], st)
+                    _assert("ingest" in st["reason"], st["reason"])
+                    u = t_universe(q, "KOSDAQ")       # instruments 는 남아 있다
+                    _assert(u["ok"] and u["n"] == 1, u)
+                finally:
+                    q.close()
+        check("일봉이 비어도 거절이 아니라 사유를 낸다",
+              _empty_price_table_is_a_reason_not_a_protocol_error)
 
         con.close()
 

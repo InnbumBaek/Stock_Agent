@@ -29,10 +29,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import dialect as D                                      # noqa: E402
-from pathlib import Path
-
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
 import envelope as E                                     # noqa: E402
 import papers as P                                       # noqa: E402
 
