@@ -392,6 +392,20 @@ else:
     (ok if not _badtool else bad)(
         f"데스크가 실재하는 MCP 도구만 부른다 ({_badtool or '전부 실재'})")
 
+    # 봉투는 **작업지시서가 준 instance** 를 그대로 적어야 한다. 데스크가 제
+    # 번호를 지어내면 시킨 일과 돌아온 일이 영원히 안 맞고, 그러면 회수 대조가
+    # 전부 '미이행 + 무단' 을 낸다 (`agents/dispatch.py`). 정의 파일에서 이
+    # 줄이 빠지는 것은 테스트가 못 본다 — 그래서 여기서 본다.
+    _noinst = []
+    for f in sorted(_ag_dir.glob("*.md")) if _ag_dir.exists() else []:
+        txt = f.read_text(encoding="utf-8")
+        if "instance" not in txt:
+            _noinst.append(f"{f.stem}:규칙없음")
+        elif '"instance"' not in txt:
+            _noinst.append(f"{f.stem}:산출예시없음")
+    (ok if not _noinst else bad)(
+        f"데스크가 지시서의 instance 를 적게 되어 있다 ({_noinst or '전부 있음'})")
+
     # agents/README.md 의 모듈별 개수. 총계만 세면 이 줄들이 조용히 낡는다 —
     # 실제로 두 번 어긋났고, 두 번 다 손으로 고치다 빠뜨려서 생긴 일이다.
     _rm = ROOT / "agents" / "README.md"

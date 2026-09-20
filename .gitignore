@@ -73,6 +73,8 @@ docs/proposals/
 agents/out/
 agents/envelopes/
 *.envelope.json
+# 작업지시서. 종목 코드와 공시 제목이 그대로 들어갑니다 — 봉투와 같은 등급.
+agents/orders/
 # 재현 판정 원본. 장부(.papers.json)에 요약만 남기고 원본은 로컬에 둡니다.
 agents/replication_runs/
 

@@ -39,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import envelope as E                                     # noqa: E402
 import gates as G                                        # noqa: E402
+import dispatch as D                                     # noqa: E402
 import papers as P                                       # noqa: E402
 import reconcile as RC                                   # noqa: E402
 import triggers as T                                     # noqa: E402
@@ -105,28 +106,67 @@ def convene(con, at: str = None, since: str = None,
     }
 
 
-def publish(envelopes: list, ledger: dict, at: str = None) -> dict:
+def publish(envelopes: list, ledger: dict, at: str = None,
+            orders: list = None) -> dict:
     """17:00 — 돌아온 봉투를 게이트에 건다.
 
     반려된 절은 **빈칸이 아니다.** '반려됨 — 사유' 로 남는다. 빈칸은 아무도
-    묻지 않지만 '반려됨'은 반드시 묻게 된다."""
+    묻지 않지만 '반려됨'은 반드시 묻게 된다.
+
+    `orders` 를 주면 **시킨 것과 돌아온 것을 짝지어** 본다 (`dispatch.py`).
+    이것 없이는 봉투 폴더에 있는 것을 전부 받는다 — 그러면 소집했는데 안 온
+    절이 '조용한 날'과 똑같이 생기고, 시킨 적 없는 봉투가 근거 있는 숫자 옆에
+    나란히 선다."""
     at = at or date.today().isoformat()
-    passed, rejected, marks = [], [], []
+    # `orders is None` 만 '대조 안 함'이다. 빈 목록은 **소집이 0건이었다**는
+    # 뜻이고, 그날 온 봉투는 전부 무단이다.
+    matched = orders is not None
+    rec = D.reconcile(orders or [], envelopes)
+    # 무단 봉투의 **번호만** 따로 둔다. 목록에서 빼지는 않는다 —
+    # 게이트 ⑥(자격증명 유출)은 예외가 없어야 하기 때문이다. 빼고 돌렸더니
+    # 키가 든 무단 봉투 하나가 발행을 멈추지 못하고 그대로 통과했다.
+    # 유출은 되돌릴 수 없어서, 그 봉투를 발행하지 않는다는 것과 그 봉투를
+    # 검사하지 않는다는 것은 전혀 다른 이야기다.
+    # 번호가 있는 것만 담는다. `None` 을 넣으면 instance 가 아예 없는 봉투가
+    # 전부 여기 걸려, 진짜 사유(읽지 못했다·형식이 깨졌다)가 "시킨 적 없는
+    # 봉투" 로 바뀐다. 그 봉투는 게이트의 형식 검사가 제 사유로 반려한다.
+    withheld_inst = ({r["instance"] for r in rec[D.UNASKED] if r["instance"]}
+                     if matched else set())
+    passed, rejected, marks = [], [], list(D.marks(rec)) if matched else []
+    withheld = []
     halt = False
     for env in envelopes:
-        r = G.run(env, ledger)
+        r = G.run(env, ledger)                  # 전부 건다. 예외 없다.
         row = {"instance": env.get("instance"), "desk": env.get("desk"),
                "claim": env.get("claim"), "gates": r["results"]}
         if r["halt_publication"]:
             halt = True
+        if env.get("instance") in withheld_inst:
+            # 게이트는 걸었다. 다만 어느 소집에서 나왔는지 모르므로 발행하지
+            # 않는다 — 되짚을 수 없는 주장이다.
+            row = {**row, "reason": "시킨 적 없는 봉투입니다 — 어느 소집에서 "
+                                    "나왔는지 알 수 없어 발행하지 않습니다"}
+            withheld.append(row)
+            rejected.append(row)
+            continue
         if r["ok"]:
             passed.append({**row, "marks": r["marks"], "envelope": env})
             marks += r["marks"]
         else:
             rejected.append({**row, "reason": r["reason"]})
+    # 안 온 절도 빈칸이 아니다. '미이행 — 사유' 로 회의자료에 남는다.
+    missing = [{"instance": r["instance"], "desk": r["desk"], "claim": None,
+                "gates": [], "reason": r["why"]} for r in rec[D.MISSING]]
+    rejected += missing
     return {
         "schema": SCHEMA, "stage": "publish", "at": at,
-        "n_in": len(envelopes), "n_passed": len(passed), "n_rejected": len(rejected),
+        "dispatch": {**{k: v for k, v in rec.items() if k != "schema"},
+                     "summary": D.summary(rec)} if matched else None,
+        # `n_in` 은 **돌아온 봉투 수**다. 여기에 미이행을 섞으면 스코어카드가
+        # 그 수로 통과율을 나눠, 아무도 보고하지 않은 날이 100% 로 보인다.
+        "n_in": len(envelopes), "n_passed": len(passed),
+        "n_rejected": len(rejected),
+        "n_missing": len(missing), "n_withheld": len(withheld),
         # 유출이 하나라도 있으면 절이 아니라 발행 전체를 멈춘다. 되돌릴 수 없어서,
         # 다른 절이 멀쩡한지는 이 판단에 영향을 주지 않는다.
         "halt_publication": halt,
@@ -187,6 +227,14 @@ def escalate(published: dict, envelopes: list, at: str = None,
 
     T3 위는 없다. 거기서 막힌 것은 승격이 아니라 **사람이 볼 일**이다."""
     at = at or date.today().isoformat()
+    # 무단 봉투는 승격 대상이 아니다. 시킨 적 없는 봉투에 재시도 지시서를
+    # 내면 **아무도 부르지 않은 데스크가 정식으로 소집된다.** 그리고 그
+    # 봉투가 `RC.review` 에 섞이면 멀쩡한 봉투를 '갈렸다'로 끌어올린다.
+    withheld = {r["instance"] for r in
+                ((published.get("dispatch") or {}).get(D.UNASKED) or [])
+                if r.get("instance")}
+    envelopes = [e for e in envelopes
+                 if e.get("instance") not in withheld]
     by_inst = {e.get("instance"): e for e in envelopes}
     orders, stuck, reasons = [], [], []
 
@@ -620,6 +668,133 @@ def selftest() -> int:
         _assert(BUDGET["T1"]["tokens"] < BUDGET["T2"]["tokens"] < BUDGET["T3"]["tokens"])
     check("세 급 모두 예산이 있고 위로 갈수록 크다", _tiers_all_budgeted)
 
+    # ── 소집과 회수를 짝지은 채로 도는가 ──────────────────────────────
+    #
+    # 여기가 비어 있어서 검토 한 번에 결함 여섯이 나왔다. `publish(orders=)`
+    # 경로를 아무도 돌려 보지 않았고, 그래서 게이트 ⑥ 을 건너뛰는 것도,
+    # 승격이 무단 봉투에 지시서를 내는 것도 검사를 통과했다.
+
+    def _ordered(desk="q2-disposal", subject="000660"):
+        return work_order({"kind": "price.move", "subject": subject,
+                           "desks": [desk], "inputs": {"code": subject},
+                           "why": "하락", "at": "2026-09-18", "tier": "T2"},
+                          desk, "2026-09-18")
+
+    def _good(inst, desk="q2-disposal", claim="처분 소요 12.4 영업일"):
+        return E.make(claim, value=12.4, unit="business_days", desk=desk,
+                      asof="2026-09-18", stale_days=0, source_grade="해석",
+                      sources=["KRX/일별매매정보"], subject="000660",
+                      instance=inst, measure="disposal_days", read=[],
+                      limits=["평시 거래대금 기준이다"], spent=E.spent(3, True))
+
+    def _leak_still_halts_even_when_withheld():
+        """무단 봉투도 게이트 ⑥ 은 통과시킨 뒤에 뺀다.
+
+        빼고 나서 검사하면 키가 든 무단 봉투 하나가 발행을 멈추지 못한다.
+        **발행하지 않는 것과 검사하지 않는 것은 전혀 다른 이야기다** —
+        유출은 되돌릴 수 없다."""
+        o = _ordered()
+        ok = _good(o["instance"])
+        rogue = E.make("https://opendart.fss.or.kr/api/list.json"
+                       "?crtfc_key=abcdef0123456789abcdef0123456789abcdef01",
+                       value=None, unit=None, desk="q1-progress",
+                       asof="2026-09-18", stale_days=0, source_grade="해석",
+                       sources=["DART/공시목록"], subject="na",
+                       reason="회수계획 파일이 없습니다", read=[],
+                       limits=["l"], spent=E.spent(1, True))
+        pub = publish([ok, rogue], led, at="2026-09-18", orders=[o])
+        _assert(pub["halt_publication"] is True, pub["halt_publication"])
+        _assert(pub["publishable"] == [], pub["publishable"])
+    check("무단 봉투의 유출도 발행을 멈춘다",
+          _leak_still_halts_even_when_withheld)
+
+    def _unasked_is_not_escalated():
+        """시킨 적 없는 봉투에 재시도 지시서를 내면, 아무도 부르지 않은
+        데스크가 정식으로 소집된다."""
+        o = _ordered()
+        ok = _good(o["instance"])
+        rogue = _good("q1-progress-20260918-na-dead", desk="q1-progress",
+                      claim="회수 진척 40%")
+        envs = [ok, rogue]
+        pub = publish(envs, led, at="2026-09-18", orders=[o])
+        esc = escalate(pub, envs, at="2026-09-18")
+        desks = {x["desk"] for x in esc.get("orders", [])}
+        _assert("q1-progress" not in desks, esc.get("orders"))
+        stuck = {x["desk"] for x in esc.get("stuck", [])}
+        _assert("q1-progress" not in stuck, esc.get("stuck"))
+    check("무단 봉투는 승격시키지 않는다", _unasked_is_not_escalated)
+
+    def _missing_is_a_named_row_not_a_blank():
+        """안 온 절도 빈칸이 아니다. 빈칸은 리포트에서 '조용한 날'과
+        똑같이 생겼고, 아무도 묻지 않는다."""
+        a1, a2 = _ordered(), _ordered("q4-timing", "000660")
+        pub = publish([_good(a1["instance"])], led, at="2026-09-18",
+                      orders=[a1, a2])
+        rows = [r for r in pub["rejected"] if r["desk"] == "q4-timing"]
+        _assert(len(rows) == 1, pub["rejected"])
+        _assert("봉투가 오지 않았" in rows[0]["reason"], rows[0])
+        _assert(pub["n_missing"] == 1 and pub["n_withheld"] == 0, pub)
+    check("미이행은 이름 달린 행으로 남는다",
+          _missing_is_a_named_row_not_a_blank)
+
+    def _n_in_counts_envelopes_not_desk_rows():
+        """`n_in` 에 미이행을 섞으면 스코어카드가 그 수로 통과율을 나눠,
+        아무도 보고하지 않은 날이 100% 로 보인다."""
+        a1, a2 = _ordered(), _ordered("q4-timing", "000660")
+        pub = publish([_good(a1["instance"])], led, at="2026-09-18",
+                      orders=[a1, a2])
+        _assert(pub["n_in"] == 1, pub["n_in"])
+        _assert(pub["n_rejected"] >= 1)
+    check("n_in 은 돌아온 봉투 수다", _n_in_counts_envelopes_not_desk_rows)
+
+    def _broken_envelope_keeps_its_own_reason():
+        """읽지 못한 봉투는 instance 가 없다. 그것을 무단으로 몰면 진짜
+        사유(형식이 깨졌다)가 '시킨 적 없는 봉투' 로 바뀐다."""
+        o = _ordered()
+        broken = {"claim": "봉투를 읽지 못했습니다: x.json",
+                  "reason": "Expecting value", "desk": "unknown"}
+        pub = publish([_good(o["instance"]), broken], led, at="2026-09-18",
+                      orders=[o])
+        row = [r for r in pub["rejected"] if r["desk"] == "unknown"]
+        _assert(len(row) == 1, pub["rejected"])
+        _assert("시킨 적 없는" not in (row[0]["reason"] or ""), row[0])
+        _assert(pub["n_withheld"] == 0, pub["n_withheld"])
+    check("읽지 못한 봉투는 제 사유를 지킨다",
+          _broken_envelope_keeps_its_own_reason)
+
+    def _no_orders_keeps_the_old_behaviour():
+        """소집한 적이 없으면 대조할 상대가 없다 — 옛 동작 그대로다."""
+        pub = publish([_good("아무거나")], led, at="2026-09-18")
+        _assert(pub["dispatch"] is None, pub["dispatch"])
+        _assert(pub["n_in"] == 1 and pub["n_withheld"] == 0)
+    check("소집한 적이 없으면 대조도 없다", _no_orders_keeps_the_old_behaviour)
+
+    def _quiet_day_still_catches_strays():
+        """'소집이 0건이었다'와 '소집한 적이 없다'는 다르다.
+
+        앞의 것은 조용한 날이고, 그날 봉투가 하나라도 있으면 전부 무단이다.
+        둘을 같게 보면 **소집이 없던 날 떠돌던 봉투가 그대로 발행된다** —
+        막으려던 구멍이 조용한 날에만 다시 열린다."""
+        pub = publish([_good("떠돌이")], led, at="2026-09-18", orders=[])
+        _assert(pub["dispatch"] is not None, pub["dispatch"])
+        _assert(pub["n_withheld"] == 1, pub["n_withheld"])
+        _assert(pub["publishable"] == [], pub["publishable"])
+        # 진짜 조용한 날은 조용하다
+        quiet = publish([], led, at="2026-09-18", orders=[])
+        _assert(quiet["n_in"] == 0 and quiet["n_withheld"] == 0, quiet)
+    check("소집 0건인 날의 떠돌이 봉투도 무단이다",
+          _quiet_day_still_catches_strays)
+
+    def _duplicate_is_marked_not_dropped():
+        """중복을 빼면 그 절이 통째로 비고, 빈칸은 아무도 묻지 않는다."""
+        o = _ordered()
+        pub = publish([_good(o["instance"]), _good(o["instance"])], led,
+                      at="2026-09-18", orders=[o])
+        _assert(pub["n_in"] == 2, pub["n_in"])
+        _assert(any("중복" in m for m in pub["marks"]), pub["marks"])
+        _assert(pub["n_withheld"] == 0)
+    check("중복은 빼지 않고 표시만 단다", _duplicate_is_marked_not_dropped)
+
     for f in failed:
         print("  X  " + f, file=sys.stderr)
     print(f"run_day    {passed_n} passed, {len(failed)} failed")
@@ -634,6 +809,10 @@ if __name__ == "__main__":
     ap.add_argument("--at")
     ap.add_argument("--db")
     ap.add_argument("--envelopes", default="agents/envelopes")
+    ap.add_argument("--orders", default=str(D.ORDERS),
+                    help="작업지시서 폴더 (소집이 쓰고 발행이 되읽는다)")
+    ap.add_argument("--no-write-orders", action="store_true",
+                    help="소집 결과를 디스크에 쓰지 않는다 (미리보기)")
     ap.add_argument("--indent", type=int, default=2)
     a = ap.parse_args()
     if not a.stage:
@@ -652,13 +831,32 @@ if __name__ == "__main__":
             out = convene(con, at=a.at, since=a.since, paper_ledger=led)
         finally:
             con.close()
+        # 지시서를 디스크에 남긴다. 안 남기면 몇 시간 뒤 봉투가 왔을 때
+        # 짝지을 상대가 없고, 석 달 뒤 되짚을 때도 없다.
+        if not a.no_write_orders:
+            out["issued"] = D.issue(out["orders"], out["at"], Path(a.orders))
     else:
         d = Path(a.envelopes)
         if not d.exists():
             print(f"봉투 폴더가 없습니다: {d}", file=sys.stderr)
             sys.exit(1)
         envs = load_envelopes(d)
-        pub = publish(envs, led, at=a.at)
-        out = pub if a.stage == "publish" else escalate(pub, envs, at=a.at)
+        # 그날 시킨 것을 되읽어 짝을 맞춘다. 지시서가 없으면 대조도 없고,
+        # 그때는 봉투 폴더에 있는 것을 전부 받는 옛 동작 그대로다.
+        at_key = a.at or date.today().isoformat()
+        # 소집한 적이 없으면 대조할 상대가 없다 (None). 소집했는데 0건이면
+        # 빈 목록이고, 그날 온 봉투는 전부 무단이다.
+        orders = (D.load_orders(at_key, Path(a.orders))
+                  if D.convened(at_key, Path(a.orders)) else None)
+        pub = publish(envs, led, at=a.at, orders=orders)
+        if a.stage == "publish":
+            out = pub
+        else:
+            out = escalate(pub, envs, at=a.at)
+            # 승격이 낸 지시서도 남겨야 한다. 안 남기면 그 봉투가 다음
+            # 발행에서 '무단' 이 되어 빠지고, 승격은 그것을 못 받았다고
+            # 또 재시도를 낸다 — 재시도가 끝나지 않는다.
+            if out.get("orders") and not a.no_write_orders:
+                out["issued"] = D.issue(out["orders"], at_key, Path(a.orders))
     print(json.dumps(out, ensure_ascii=False, indent=a.indent))
     sys.exit(1 if out.get("halt_publication") else 0)

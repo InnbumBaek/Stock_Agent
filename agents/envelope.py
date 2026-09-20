@@ -324,8 +324,16 @@ def make(claim, *, desk, asof, source_grade, limits, value=None, unit=None,
          sources=None, method=None, reason=None, subject="", tier="T2",
          stale_days=None, salt="", read=None, measure=None,
          attempt: int = 1, escalated_from: str = None,
-         spent: dict = None) -> dict:
-    """봉투를 짓는다. 지어낸 값을 채워 넣지 않는다 — 빠진 것은 빠진 채로 둔다."""
+         spent: dict = None, instance: str = None) -> dict:
+    """봉투를 짓는다. 지어낸 값을 채워 넣지 않는다 — 빠진 것은 빠진 채로 둔다.
+
+    `instance` 는 **작업지시서가 준 것을 그대로 적는다.** 없으면 새로 만든다.
+
+    이 인자가 없던 동안, 지시서는 `...-07ba` 를 주고 봉투는 `...-aa4a` 를
+    지어냈다. 둘은 영원히 안 맞는다 — 씨앗(`asof` 와 `salt`)이 다르기
+    때문이다. 그러면 소집과 회수를 짝지을 수 없고, **시킨 일이 안 돌아온
+    것이 조용한 날과 구분되지 않는다.** `attempt` 때와 같은 구멍이다:
+    지시서가 주는데 봉투가 적을 방법이 없었다."""
     env = {
         "schema": SCHEMA,
         "claim": claim,
@@ -347,7 +355,7 @@ def make(claim, *, desk, asof, source_grade, limits, value=None, unit=None,
         "attempt": attempt,
         "spent": spent,
         "reviewed_by": [],
-        "instance": new_instance(desk, asof, subject or "na", salt),
+        "instance": instance or new_instance(desk, asof, subject or "na", salt),
     }
     return env
 
@@ -550,6 +558,26 @@ def selftest() -> int:
         _assert(validate(e) == [], validate(e))
     check("작업지시서의 attempt·승격기록을 봉투가 되받는다",
           _make_round_trips_the_work_order)
+
+    def _make_round_trips_the_instance():
+        """지시서가 준 instance 를 봉투가 그대로 적을 수 있어야 한다.
+
+        못 받으면 지시서는 `...-07ba` 를 주고 봉투는 `...-aa4a` 를 지어낸다.
+        씨앗(`asof`·`salt`)이 다르니 둘은 영원히 안 맞고, 그러면 소집과 회수를
+        짝지을 수 없다 — **시킨 일이 안 돌아온 것이 조용한 날과 구분되지
+        않는다.** `attempt` 때와 같은 구멍이다."""
+        given = "q2-disposal-20260918-000660-07ba"
+        e = make("a", desk="q2-disposal", asof="2026-09-18", source_grade="해석",
+                 limits=["x"], subject="000660", instance=given,
+                 reason="일봉이 12개뿐입니다")
+        _assert(e["instance"] == given, e["instance"])
+        _assert(validate(e) == [], validate(e))
+        # 안 주면 지금처럼 만든다
+        e2 = make("a", desk="q2-disposal", asof="2026-09-18",
+                  source_grade="해석", limits=["x"], subject="000660")
+        _assert(e2["instance"] and e2["instance"] != given)
+    check("작업지시서의 instance 를 봉투가 되받는다",
+          _make_round_trips_the_instance)
 
     def _spent_shape():
         e = _sample()

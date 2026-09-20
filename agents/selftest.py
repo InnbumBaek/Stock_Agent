@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import cycle                                             # noqa: E402
 import dialect                                           # noqa: E402
+import dispatch                                          # noqa: E402
 import envelope                                          # noqa: E402
 import eventstudy                                        # noqa: E402
 import gates                                             # noqa: E402
@@ -30,7 +31,7 @@ import triggers                                          # noqa: E402
 # 없습니다' 를 내는데, 그 문장은 코드가 틀렸다는 뜻이 아니라 자료가 없다는
 # 뜻으로 읽힌다 — 이 줄이 실패하면 아래의 통과는 뜻이 없다.
 MODULES = (dialect, envelope, papers, replication, eventstudy, gates, triggers,
-           ki_ledger_mcp, cycle, reconcile, run_day, scorecard, replay)
+           ki_ledger_mcp, dispatch, cycle, reconcile, run_day, scorecard, replay)
 
 
 def main() -> int:

@@ -793,7 +793,7 @@ function sRoadmap() {
     ["P1", "들어감", "논문 원장", ["ki.papers/2 스키마 전환", "state · replication · 반감기", "기존 12편 이관 (미검증으로)", "papers MCP 도구"], CYN, 1],
     ["P2", "들어감", "재현 관문", ["분위 러너 · 이벤트 러너", "임계 |t| ≥ 3.0 확정", "판정 → 장부 append", "게이트 ③ 코드화"], GRN, 1],
     ["P3", "들어감", "사이클 상시화", ["월 07:40 주간 배치 등록", "재검 도래분 합류 · 주 3편", "감가 · 경고 · 은퇴 자동화", "채택률 실측은 원장 필요"], AMB, 0.85],
-    ["P4", "들어감", "동적 소집", ["트리거 스캐너", "작업지시서 · 예산 · 소멸", "T1~T3 에스컬레이션", "봉투 v2 · instance · read"], PUR, 1],
+    ["P4", "들어감", "동적 소집", ["트리거 스캐너", "작업지시서 발급 · 회수 대조", "T1~T3 에스컬레이션", "봉투 v2 · instance · read"], PUR, 1],
     ["P5", "일부", "병행 운영", ["스코어카드 · 리플레이", "사람 산출과 2주 대조", "불일치 원인 전수 분석", "전환 여부는 사람이 결정"], MAG, 0.4],
   ];
   const pw = 2.36, pg = 0.12;
@@ -810,7 +810,7 @@ function sRoadmap() {
     });
   });
 
-  const outs = [["코드로 끝난 것", "스키마 · 러너 · 관문 · 트리거 · 사이클 · 되짚기 — 자체 검사 279개", GRN],
+  const outs = [["코드로 끝난 것", "스키마 · 러너 · 관문 · 트리거 · 사이클 · 되짚기 — 자체 검사 300개", GRN],
                 ["원장이 있어야 되는 것", "12편 중 5편의 실제 재현 · 채택률 · 트리거 발생률 실측", AMB],
                 ["사람이 정할 것", "병행 2주 결과로 전환 여부 — 이 덱이 아니라 회의에서", MAG]];
   outs.forEach((o, i) => {
@@ -848,7 +848,7 @@ function sNext() {
   });
 
   mono(s, "성공 판정 지표", { x: 8.6, y: 1.62, w: 4.1, h: 0.28, fontSize: 12, bold: true, color: AMB, charSpacing: 1 });
-  const kpi = [["279개", "자체 검사", "키·네트워크·원장 없이 돈다", GRN],
+  const kpi = [["300개", "자체 검사", "키·네트워크·원장 없이 돈다", GRN],
                ["0줄", "ki_monitor.py 변경", "측정층은 손대지 않았다", CYN],
                ["8 / 12", "검정 대상 논문", "나머지 4편은 원래 대상 아님", AMB],
                ["0건", "미분류 논문", "전부 셋 중 하나로 분류됐다", MAG]];
@@ -890,7 +890,7 @@ function sExec() {
 
   const st = [["주 1회", "논문 사이클", "신규 + 재검 도래분"], ["N", "살아있는 논문", "고정값이 아니다"],
               ["7", "발행 게이트", "재현 관문 신설"], ["0", "원장 쓰기 권한", "에이전트는 못 쓴다"],
-              ["0줄", "ki_monitor.py 변경", "측정층은 그대로"], ["279개", "자체 검사", "키·망·원장 없이"]];
+              ["0줄", "ki_monitor.py 변경", "측정층은 그대로"], ["300개", "자체 검사", "키·망·원장 없이"]];
   st.forEach((t, i) => {
     const x = 8.72 + (i % 2) * 2.02, y = 1.82 + Math.floor(i / 2) * 1.42;
     panel(s, { x, y, w: 1.88, h: 1.3, fill: PANEL, line: EDGE });
@@ -1137,7 +1137,7 @@ function sStack() {
 
   panel(s, { x: M, y: 6.62, w: CW, h: 0.5, fill: PANEL3, line: EDGE });
   txt(s, [
-    { text: "실제로 들어간 것 — agents/ 파이썬 13개 · 데스크 정의 9 · 스킬 5 · 자체 검사 279개. ", options: { bold: true, color: GRN } },
+    { text: "실제로 들어간 것 — agents/ 파이썬 14개 · 데스크 정의 9 · 스킬 5 · 자체 검사 300개. ", options: { bold: true, color: GRN } },
     { text: "기존 코드 변경은 0줄이다. ki_monitor.py 는 열지 않았다.", options: { color: INK } },
   ], { x: M + 0.26, y: 6.62, w: CW - 0.52, h: 0.5, fontSize: 10.5, valign: "middle", fontFace: F, isTextBox: true, margin: 0 });
 }
@@ -1253,7 +1253,7 @@ function sAppendix() {
     '├─ docs/                 audit.py 에 정의 대조 [10] · 원장 방언 [11]',
     '├─ RUN_ALL · SCHEDULE    월 07:40 주간 재현 한 줄 추가',
     '│',
-    '├─ agents/               ← 들어감 (자체 검사 279개)',
+    '├─ agents/               ← 들어감 (자체 검사 300개)',
     '│   ├─ dialect.py           원장의 말 (형식을 묻는다)  15',
     '│   ├─ envelope.py          봉투 스키마 · 검증기      28',
     '│   ├─ papers.py            논문 장부 ki.papers/2    23',
@@ -1261,10 +1261,11 @@ function sAppendix() {
     '│   ├─ eventstudy.py        이벤트 러너 (사건 시간)   19',
     '│   ├─ gates.py             게이트 ①~⑦ 검사기     20',
     '│   ├─ ki_ledger_mcp.py     MCP 서버 · 읽기 10종   34',
-    '│   ├─ selftest.py          열세 개를 한 번에',
+    '│   ├─ dispatch.py          지시서 발급 · 회수 대조    12',
+    '│   ├─ selftest.py          열네 개를 한 번에',
     '│   ├─ triggers.py          트리거 스캐너 · 소집      23',
     '│   ├─ cycle.py             주간 논문 사이클         14',
-    '│   ├─ run_day.py           소집 · 발행 · 승격        28',
+    '│   ├─ run_day.py           소집 · 발행 · 승격        36',
     '│   ├─ reconcile.py         데스크 간 대조            15',
     '│   ├─ scorecard.py         계측 (고치지는 않는다)    16',
     '│   └─ replay.py            되짚기 · 원장 대조         15',
@@ -1298,7 +1299,7 @@ function sAppendix() {
     txt(s, n[0], { x: 8.0, y: y + 0.12, w: 4.5, h: 0.3, fontSize: 12, bold: true, color: n[2] });
     txt(s, n[1], { x: 7.74, y: y + 0.44, w: 4.76, h: 0.56, fontSize: 9.5, color: MUT });
   });
-  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 13 · 데스크 정의 9 · 스킬 5 · 자체 검사 279개 · ki_monitor.py 변경 0줄");
+  foot(s, "// 실제로 들어갔다 — agents/ 파이썬 14 · 데스크 정의 9 · 스킬 5 · 자체 검사 300개 · ki_monitor.py 변경 0줄");
 }
 
 
