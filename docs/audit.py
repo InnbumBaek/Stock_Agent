@@ -522,6 +522,51 @@ for f in _AG:
 (ok if not _fix else bad)(
     f"합성 원장이 진짜 원장의 형식으로 적힌다 ({_fix or '전부 YYYYMMDD'})")
 
+# ── [12] 상장 포트폴리오사만 보는가 ──────────────────────────────────
+#
+# 이 도구는 **시장 감시기가 아니다.** 우리가 들고 있는 상장 포트폴리오사의
+# 회수 판단을 돕는 물건이고, 코스닥 전체는 배경이다 (리포트 §7).
+#
+# 측정층은 그 구분을 지킨다 — `_watchlist()` 가 주인공을 정한다. 판단층에는
+# 그 구분이 없어서 트리거가 원장을 통째로 훑었다. 재 봤다: 코스닥 1,700종목
+# 에서 하루 ±8% 이상 움직인 것이 37개, 그중 우리 것은 2개. 인스턴스 70개가
+# 남의 회사에 쓰이고, 그 봉투가 회수 판단 리포트에 섞인다.
+#
+# 이 검사가 없으면 누군가 `codes=` 를 지워도 테스트는 전부 통과한다 —
+# 합성 원장에는 우리 종목만 들어 있기 때문이다.
+
+print("\n[12] 상장 포트폴리오사만 보는가")
+
+_TRG = (ROOT / "agents" / "triggers.py").read_text(encoding="utf-8")
+_SCOPED = ("scan_disclosures", "scan_price_moves", "scan_lockups")
+_unscoped = []
+for _fn in _SCOPED:
+    m = re.search(rf"def {_fn}\((.*?)\)\s*->", _TRG, re.S)
+    if not m or "codes" not in m.group(1):
+        _unscoped.append(f"{_fn}: codes 인자 없음")
+        continue
+    # 인자만 받고 안 쓰면 아무 일도 하지 않는다 — 본문에서 거르는지 본다
+    body = _TRG[m.end():]
+    body = body[:body.find("\ndef ")] if "\ndef " in body else body
+    if "codes is not None" not in body:
+        _unscoped.append(f"{_fn}: codes 를 받기만 하고 거르지 않음")
+(ok if not _unscoped else bad)(
+    f"종목 스캐너가 포트폴리오사로 좁힌다 ({_unscoped or '전부 좁힘'})")
+
+# 범위를 못 정한 날이 '조용한 날'로 읽히면 안 된다.
+(ok if '"scope"' in _TRG and "scope_row" in _TRG else bad)(
+    "소집 산출이 범위를 밝힌다 (scope)")
+
+# 종목코드는 대외비다 — 범위 산출에 실리면 안 된다.
+_SCOPE_SRC = (ROOT / "agents" / "scope.py").read_text(encoding="utf-8")
+# `scope_row` 가 아예 없으면 위 검사가 이미 잡는다. 여기서 쪼개다 터지면
+# 감사가 **그 결함을 보고하지 못하고 죽는다** — 검사가 검사를 못 하게 된다.
+_after = _TRG.split("scope_row")
+(ok if len(_after) > 1 and '"codes"' not in _after[1][:400] else bad)(
+    "범위 산출에 종목코드를 싣지 않는다")
+(ok if "_watchlist" in _SCOPE_SRC else bad)(
+    "범위는 측정층의 watchlist 파서를 쓴다")
+
 print("\n" + "=" * 60)
 if fails:
     print(f"실패 {len(fails)}건")

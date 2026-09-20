@@ -26,6 +26,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import dialect as D                                      # noqa: E402
+import scope as SC                                       # noqa: E402
 
 SCHEMA = "ki.triggers/1"
 
@@ -105,17 +106,30 @@ def _route_disclosure(title: str, tags: str) -> tuple[tuple, str]:
 
 # ── 스캐너 ────────────────────────────────────────────────────────────
 
-def scan_disclosures(con, since: str, limit: int = 200) -> list[Trigger]:
+def scan_disclosures(con, since: str, limit: int = 200,
+                     codes: set = None) -> list[Trigger]:
     """새 공시 하나에 소집 하나. 공시 종류로 어느 데스크인지 갈린다.
+
+    `codes` 는 **상장 포트폴리오사**다 (`scope.py`). 이 도구는 시장 감시기가
+    아니라 우리가 들고 있는 회사의 회수 판단을 돕는 물건이다 — 남의 회사
+    공시로 데스크를 부르면 그 봉투가 회수 판단 리포트에 섞인다.
 
     DART 의 `rcept_dt` 는 `"20260108"` 이다. `since` 는 ISO 다. 둘을 맨눈으로
     비교하면 같은 해의 옛 공시가 전부 '새 공시'가 된다 (`dialect.sql_date`)."""
     cut = D.norm_date(since)
-    rows = con.execute(
-        f"SELECT rcept_no, code, rcept_dt, title, tags FROM disclosure "
-        f"WHERE {D.sql_date('rcept_dt')} > ? "
-        f"ORDER BY {D.sql_date('rcept_dt')}, rcept_no LIMIT ?",
-        (cut, limit)).fetchall()
+    # `limit` 은 **거른 뒤에** 건다. SQL 에서 먼저 자르면 공시가 몰린 날
+    # 우리 회사 공시가 잘려 나가고, `since` 는 그 날짜를 지나 버려서 그
+    # 공시는 영영 안 잡힌다 — 조용히 빠지는 쪽이다.
+    q = (f"SELECT rcept_no, code, rcept_dt, title, tags FROM disclosure "
+         f"WHERE {D.sql_date('rcept_dt')} > ? ")
+    p = [cut]
+    if codes is not None:
+        # 거르기를 SQL 로 내린다. 종목 수가 적어 IN 절이 짧다.
+        q += f"AND code IN ({','.join('?' * len(codes))}) "
+        p += sorted(codes)
+    q += f"ORDER BY {D.sql_date('rcept_dt')}, rcept_no LIMIT ?"
+    p.append(limit)
+    rows = con.execute(q, p).fetchall()
     out = []
     for r in rows:
         desks, why = _route_disclosure(r["title"], r["tags"])
@@ -130,8 +144,14 @@ def scan_disclosures(con, since: str, limit: int = 200) -> list[Trigger]:
     return out
 
 
-def scan_price_moves(con, since: str, pct: float = MOVE_PCT) -> list[Trigger]:
+def scan_price_moves(con, since: str, pct: float = MOVE_PCT,
+                     codes: set = None) -> list[Trigger]:
     """종가가 크게 움직인 종목. 처분 여건이 달라졌을 수 있다.
+
+    `codes` 는 **상장 포트폴리오사**다 (`scope.py`). 없이 돌리면 시장 전체를
+    훑는다 — 재 봤다: 코스닥 1,700종목에서 하루 ±8% 이상 움직인 것이 37개고
+    그중 우리 것은 2개였다. 나머지 35개 종목 · 인스턴스 70개가 우리가 갖지도
+    않은 회사에 쓰인다.
 
     종목당 하나만 낸다. 사흘 연속 움직였다고 세 번 부르면, 세 인스턴스가 거의
     같은 말을 하고 그중 하나만 회의에 올라간다."""
@@ -151,6 +171,8 @@ def scan_price_moves(con, since: str, pct: float = MOVE_PCT) -> list[Trigger]:
     out, prev, seen = [], {}, set()
     for r in rows:
         c, d, px = r["code"], D.norm_date(r["date"]), r["close"]
+        if codes is not None and c not in codes:
+            continue                      # 우리 포트폴리오사가 아니다
         p = prev.get(c)
         prev[c] = px
         if p is None or not p or d <= since_c or c in seen:
@@ -167,13 +189,19 @@ def scan_price_moves(con, since: str, pct: float = MOVE_PCT) -> list[Trigger]:
     return sorted(out, key=lambda t: t.subject)
 
 
-def scan_lockups(con, today: str, warn_d: int = LOCKUP_WARN_D) -> list[Trigger]:
-    """보호예수 해제가 다가오는 종목. 풀린 날 부르면 이미 늦다."""
+def scan_lockups(con, today: str, warn_d: int = LOCKUP_WARN_D,
+                 codes: set = None) -> list[Trigger]:
+    """보호예수 해제가 다가오는 종목. 풀린 날 부르면 이미 늦다.
+
+    `codes` 는 **상장 포트폴리오사**다 (`scope.py`). 남의 회사 해제일은
+    우리 회수 계획과 상관이 없다."""
     rows = con.execute(
         "SELECT code, name, list_date FROM instruments "
         "WHERE list_date IS NOT NULL AND list_date <> '' ORDER BY code").fetchall()
     out = []
     for r in rows:
+        if codes is not None and r["code"] not in codes:
+            continue                      # 우리 포트폴리오사가 아니다
         # KRX `LIST_DD` 는 `"20170102"` 다. `fromisoformat` 이 그 형식을 받는
         # 것은 3.11 부터라, 3.10 에서는 전 종목이 조용히 빠진다.
         ld = D.parse_date(r["list_date"])
@@ -257,18 +285,29 @@ def scan_paper_rechecks(paper_ledger: dict, today: str,
 
 
 def scan(con, today: str = None, since: str = None,
-         paper_ledger: dict = None, recheck_cap: int = 3) -> dict:
+         paper_ledger: dict = None, recheck_cap: int = 3,
+         portfolio: dict = None) -> dict:
     """원장을 한 번 훑어 그날의 소집을 낸다.
 
     `since` 는 마지막으로 훑은 날이다. 이것이 없으면 원장 전체가 '새 것'이
-    되어 첫 실행에 수백 건이 쏟아진다."""
+    되어 첫 실행에 수백 건이 쏟아진다.
+
+    **종목을 보는 스캐너는 상장 포트폴리오사로 좁힌다** (`scope.py`). 이
+    도구는 시장 감시기가 아니다. 거시와 논문 재검은 좁히지 않는다 — 그쪽은
+    시장·장부 전체가 대상이 맞다."""
     today = today or date.today().isoformat()
     since = since or _bdays_before(today, 1)
 
+    pf = SC.portfolio() if portfolio is None else portfolio
+    codes = SC.as_set(pf) if pf.get("ok") else None
+
     ts: list[Trigger] = []
-    ts += scan_disclosures(con, since)
-    ts += scan_price_moves(con, since)
-    ts += scan_lockups(con, today)
+    if pf.get("ok"):
+        # 종목 단위 스캐너 — 우리 회사만 본다
+        ts += scan_disclosures(con, since, codes=codes)
+        ts += scan_price_moves(con, since, codes=codes)
+        ts += scan_lockups(con, today, codes=codes)
+    # 거시·논문은 종목과 무관하다. 범위를 못 정했어도 이쪽은 돈다.
     ts += scan_macro(con, since)
     ts += scan_paper_rechecks(paper_ledger or {}, today, recheck_cap)
 
@@ -281,8 +320,18 @@ def scan(con, today: str = None, since: str = None,
         uniq.append(t)
 
     convened = sorted({d for t in uniq for d in t.desks})
+    # 범위는 산출에 적는다. 종목코드는 대외비라 **개수와 사유만** 낸다 —
+    # 못 정했으면 그 사실이 '조용한 날'로 읽히지 않게 크게 적는다.
+    scope_row = {"ok": bool(pf.get("ok")), "n_listed": int(pf.get("n") or 0),
+                 "n_unlisted": int(pf.get("n_unlisted") or 0),
+                 "why": pf.get("why")}
+    if not pf.get("ok"):
+        scope_row["note"] = ("상장 포트폴리오사를 모르면 종목 단위 소집을 "
+                             "하지 않습니다. 오늘 종목 트리거가 없는 것은 "
+                             "'조용한 날'이 아니라 **범위를 못 정한 날**입니다.")
     return {
         "schema": SCHEMA, "at": today, "since": since,
+        "scope": scope_row,
         "standing": list(STANDING),
         "triggers": [t.as_dict() for t in uniq],
         "n": len(uniq),
@@ -296,7 +345,13 @@ def scan(con, today: str = None, since: str = None,
 # ── 자체 검사 ─────────────────────────────────────────────────────────
 
 # 합성 원장이 쓸 시장 이름. 진짜 원장이 쓰는 값이다 (`dialect`).
-_MKT = D.MARKET_ALIASES["KOSDAQ"][0]
+# 합성 원장이 쓸 시장 이름. **표마다 다르다** — `price_daily` 는 영문이고
+# (`krx_daily_prices` 가 영문 키로 넣는다), `instruments` 는 `MKT_TP_NM` 이라
+# 한글일 수 있다. 처음에 둘 다 한글로 만들었다가 리포트가 "KOSDAQ 원장이
+# 비어 있습니다" 로 죽었다. 섞어 두어야 `resolve_market(..., table=)` 이
+# 표마다 물어보는지가 검사에 걸린다.
+_MKT = "KOSDAQ"                                   # price_daily.market
+_MKT_INST = D.MARKET_ALIASES["KOSDAQ"][0]         # instruments.market (한글)
 
 
 def _ledger(rows_price=(), disclosures=(), instruments=(), macro=(),
@@ -313,8 +368,11 @@ def _ledger(rows_price=(), disclosures=(), instruments=(), macro=(),
     def _d(v):
         return D.iso_date(v) if iso else D.norm_date(v)
 
-    def _m(v):
-        return v if iso else (D._pick([_MKT], v) or _MKT)
+    def _m(v, table="price_daily"):
+        if iso:
+            return v
+        want = _MKT_INST if table == "instruments" else _MKT
+        return D._pick([want], v) or want
 
     con = sqlite3.connect(":memory:")
     con.row_factory = sqlite3.Row
@@ -333,7 +391,8 @@ def _ledger(rows_price=(), disclosures=(), instruments=(), macro=(),
     con.executemany("INSERT INTO disclosure VALUES (?,?,?,?,?)",
                     [(no, c, _d(dt), t, g) for no, c, dt, t, g in disclosures])
     con.executemany("INSERT INTO instruments VALUES (?,?,?,?)",
-                    [(c, n, _m(m), _d(ld)) for c, n, m, ld in instruments])
+                    [(c, n, _m(m, "instruments"), _d(ld))
+                     for c, n, m, ld in instruments])
     con.executemany("INSERT INTO macro_daily VALUES (?,?,?)",
                     [(_d(d), k, v) for d, k, v in macro])
     con.commit()
@@ -354,11 +413,20 @@ def selftest() -> int:
         if not c:
             raise AssertionError(why or "거짓")
 
+    # 검사에 쓰는 상장 포트폴리오사 범위. 이 도구는 시장 감시기가 아니라서,
+    # 범위 없이 돌리면 종목 단위 소집이 **하나도 나오지 않는 것이 정상**이다.
+    def _pf(*codes, ok=True, n_unlisted=0):
+        return {"schema": "ki.scope/1", "ok": ok, "codes": list(codes),
+                "n": len(codes), "n_unlisted": n_unlisted,
+                "why": None if ok else "검사용 — 범위를 못 정한 날"}
+
+    ALL = _pf("000660", "005930", "111111", "035720")
+
     def _quiet_day():
         """조용한 날은 아무도 소집되지 않는다 — 이 구조의 요점이다."""
         con = _ledger(rows_price=[("2026-09-10", "000660", "KOSDAQ", 100.0),
                                   ("2026-09-11", "000660", "KOSDAQ", 100.5)])
-        r = scan(con, today="2026-09-11", since="2026-09-10")
+        r = scan(con, today="2026-09-11", since="2026-09-10", portfolio=ALL)
         con.close()
         _assert(r["n"] == 0, r["triggers"])
         _assert(r["convened"] == [])
@@ -369,7 +437,7 @@ def selftest() -> int:
     def _price_move():
         con = _ledger(rows_price=[("2026-09-10", "000660", "KOSDAQ", 100.0),
                                   ("2026-09-11", "000660", "KOSDAQ", 88.0)])
-        r = scan(con, today="2026-09-11", since="2026-09-10")
+        r = scan(con, today="2026-09-11", since="2026-09-10", portfolio=ALL)
         con.close()
         t = [x for x in r["triggers"] if x["kind"] == "price.move"]
         _assert(len(t) == 1, r["triggers"])
@@ -380,7 +448,7 @@ def selftest() -> int:
     def _small_move_ignored():
         con = _ledger(rows_price=[("2026-09-10", "000660", "KOSDAQ", 100.0),
                                   ("2026-09-11", "000660", "KOSDAQ", 95.0)])
-        r = scan(con, today="2026-09-11", since="2026-09-10")
+        r = scan(con, today="2026-09-11", since="2026-09-10", portfolio=ALL)
         con.close()
         _assert(r["n"] == 0)                            # -5% 는 임계 아래
     check("임계 아래 변동은 부르지 않는다", _small_move_ignored)
@@ -390,7 +458,7 @@ def selftest() -> int:
         con = _ledger(rows_price=[("2026-09-09", "000660", "KOSDAQ", 100.0),
                                   ("2026-09-10", "000660", "KOSDAQ", 88.0),
                                   ("2026-09-11", "000660", "KOSDAQ", 77.0)])
-        r = scan(con, today="2026-09-11", since="2026-09-09")
+        r = scan(con, today="2026-09-11", since="2026-09-09", portfolio=ALL)
         con.close()
         _assert(len([x for x in r["triggers"] if x["kind"] == "price.move"]) == 1)
     check("같은 종목을 두 번 부르지 않는다", _one_per_code)
@@ -402,7 +470,7 @@ def selftest() -> int:
             ("R3", "000660", "2026-09-11", "매출액또는손익구조30%이상변동", "실적"),
             ("R4", "000660", "2026-09-11", "기타경영사항", ""),
         ])
-        r = scan(con, today="2026-09-11", since="2026-09-10")
+        r = scan(con, today="2026-09-11", since="2026-09-10", portfolio=ALL)
         con.close()
         by = {x["subject"]: x for x in r["triggers"]}
         _assert(by["R1"]["desks"] == ["q2-disposal"], by["R1"])
@@ -415,7 +483,7 @@ def selftest() -> int:
     def _disclosure_since():
         """이미 본 공시를 다시 부르지 않는다."""
         con = _ledger(disclosures=[("R1", "000660", "2026-09-09", "전환가액의조정", "refix")])
-        r = scan(con, today="2026-09-11", since="2026-09-10")
+        r = scan(con, today="2026-09-11", since="2026-09-10", portfolio=ALL)
         con.close()
         _assert(r["n"] == 0)
     check("감시선 이전의 공시는 다시 부르지 않는다", _disclosure_since)
@@ -423,9 +491,9 @@ def selftest() -> int:
     def _lockup():
         # 2026-03-20 상장 → 6개월 뒤 2026-09-20 해제. 30영업일 전부터 경고.
         con = _ledger(instruments=[("000660", "샘플", "KOSDAQ", "2026-03-20")])
-        near = scan(con, today="2026-09-11")
-        far = scan(con, today="2026-05-01")
-        after = scan(con, today="2026-10-15")
+        near = scan(con, today="2026-09-11", portfolio=ALL)
+        far = scan(con, today="2026-05-01", portfolio=ALL)
+        after = scan(con, today="2026-10-15", portfolio=ALL)
         con.close()
         t = [x for x in near["triggers"] if x["kind"] == "lockup.d30"]
         _assert(len(t) == 1, near["triggers"])
@@ -439,7 +507,7 @@ def selftest() -> int:
     def _macro():
         con = _ledger(macro=[("2026-09-11", "base_rate", 3.0),
                              ("2026-09-11", "usdkrw", 1300.0)])
-        r = scan(con, today="2026-09-11", since="2026-09-10")
+        r = scan(con, today="2026-09-11", since="2026-09-10", portfolio=ALL)
         con.close()
         t = [x for x in r["triggers"] if x["kind"] == "macro.update"]
         _assert(len(t) == 1)
@@ -452,7 +520,7 @@ def selftest() -> int:
         led = {"papers": {f"p{i}": {"state": "unverified", "recheck_due": None,
                                     "question": "q2"} for i in range(12)}}
         con = _ledger()
-        r = scan(con, today="2026-09-11", paper_ledger=led)
+        r = scan(con, today="2026-09-11", paper_ledger=led, portfolio=ALL)
         con.close()
         t = [x for x in r["triggers"] if x["kind"] == "paper.recheck"]
         _assert(len(t) == 3, len(t))                    # 12편이 아니라 3편
@@ -469,7 +537,7 @@ def selftest() -> int:
             "none": {"state": "unverified", "recheck_due": None, "question": "q1"},
         }}
         con = _ledger()
-        r = scan(con, today="2026-09-11", paper_ledger=led, recheck_cap=2)
+        r = scan(con, today="2026-09-11", paper_ledger=led, recheck_cap=2, portfolio=ALL)
         con.close()
         got = [x["subject"] for x in r["triggers"] if x["kind"] == "paper.recheck"]
         _assert(got == ["old", "new"], got)
@@ -489,7 +557,7 @@ def selftest() -> int:
         led["papers"]["amihud2002"] = {"state": "unverified",
                                        "recheck_due": None, "question": "q2"}
         con = _ledger()
-        r = scan(con, today="2026-09-11", paper_ledger=led)
+        r = scan(con, today="2026-09-11", paper_ledger=led, portfolio=ALL)
         con.close()
         got = [t["subject"] for t in r["triggers"] if t["kind"] == "paper.recheck"]
         _assert(got == ["amihud2002"], got)
@@ -499,7 +567,7 @@ def selftest() -> int:
         led = {"papers": {"dead": {"state": "retired", "recheck_due": "2020-01-01",
                                    "question": "q1"}}}
         con = _ledger()
-        r = scan(con, today="2026-09-11", paper_ledger=led)
+        r = scan(con, today="2026-09-11", paper_ledger=led, portfolio=ALL)
         con.close()
         _assert(r["n"] == 0)                            # 은퇴본은 다시 보지 않는다
     check("은퇴한 논문은 재검하지 않는다", _retired_not_rechecked)
@@ -508,7 +576,7 @@ def selftest() -> int:
         led = {"papers": {"ok": {"state": "adopted", "recheck_due": "2099-01-01",
                                  "question": "q1"}}}
         con = _ledger()
-        r = scan(con, today="2026-09-11", paper_ledger=led)
+        r = scan(con, today="2026-09-11", paper_ledger=led, portfolio=ALL)
         con.close()
         _assert(r["n"] == 0)
     check("기한 전인 논문은 부르지 않는다", _future_due_not_called)
@@ -521,7 +589,7 @@ def selftest() -> int:
         con = _ledger(disclosures=[("R1", "000660", "2026-09-11", "전환가액의조정", "refix")],
                       rows_price=[("2026-09-10", "000660", "KOSDAQ", 100.0),
                                   ("2026-09-11", "000660", "KOSDAQ", 88.0)])
-        r = scan(con, today="2026-09-11", since="2026-09-10")
+        r = scan(con, today="2026-09-11", since="2026-09-10", portfolio=ALL)
         con.close()
         blob = json.dumps(r, ensure_ascii=False)        # 직렬화되는가 (무상태)
         _assert(blob)
@@ -541,7 +609,7 @@ def selftest() -> int:
                                   ("2026-09-11", "000660", "KOSDAQ", 88.0)])
         led = {"papers": {"p": {"state": "unverified", "recheck_due": None,
                                 "question": "q1"}}}
-        r = scan(con, today="2026-09-11", since="2026-09-10", paper_ledger=led)
+        r = scan(con, today="2026-09-11", since="2026-09-10", paper_ledger=led, portfolio=ALL)
         con.close()
         for t in r["triggers"]:
             for d in t["desks"]:
@@ -556,8 +624,8 @@ def selftest() -> int:
     def _deterministic():
         rows = [("2026-09-10", "000660", "KOSDAQ", 100.0),
                 ("2026-09-11", "000660", "KOSDAQ", 88.0)]
-        a = _ledger(rows_price=rows); ra = scan(a, today="2026-09-11", since="2026-09-10"); a.close()
-        b = _ledger(rows_price=rows); rb = scan(b, today="2026-09-11", since="2026-09-10"); b.close()
+        a = _ledger(rows_price=rows); ra = scan(a, today="2026-09-11", since="2026-09-10", portfolio=ALL); a.close()
+        b = _ledger(rows_price=rows); rb = scan(b, today="2026-09-11", since="2026-09-10", portfolio=ALL); b.close()
         _assert(ra == rb)
     check("두 번 훑으면 같은 소집이 나온다 (결정적)", _deterministic)
 
@@ -565,7 +633,7 @@ def selftest() -> int:
         con = _ledger(rows_price=[("2026-09-10", "000660", "KOSDAQ", 100.0),
                                   ("2026-09-11", "000660", "KOSDAQ", 88.0)])
         before = con.execute("SELECT COUNT(*) FROM price_daily").fetchone()[0]
-        scan(con, today="2026-09-11", since="2026-09-10")
+        scan(con, today="2026-09-11", since="2026-09-10", portfolio=ALL)
         after = con.execute("SELECT COUNT(*) FROM price_daily").fetchone()[0]
         con.close()
         _assert(before == after)
@@ -585,7 +653,8 @@ def selftest() -> int:
         i = con.execute("SELECT market, list_date FROM instruments").fetchone()
         con.close()
         _assert(d["date"] == "20260911", d["date"])
-        _assert(d["market"] == "코스닥", d["market"])
+        # `market` 은 표마다 다르다 — 일봉은 영문, 종목목록은 MKT_TP_NM 이라 한글
+        _assert(d["market"] == "KOSDAQ", d["market"])
         _assert(i["market"] == "코스닥" and i["list_date"] == "20260320", tuple(i))
     check("합성 원장이 진짜 원장의 형식이다", _fixture_is_the_real_dialect)
 
@@ -646,7 +715,7 @@ def selftest() -> int:
                 disclosures=[("X", "000660", "2026-09-11", "유상증자 결정", "")],
                 instruments=[("000660", "샘플", "KOSDAQ", "2026-03-20")],
                 macro=[("2026-09-11", "k", 1.0)], iso=iso)
-            r = scan(con, today="2026-09-11", since="2026-09-10")
+            r = scan(con, today="2026-09-11", since="2026-09-10", portfolio=ALL)
             con.close()
             for t in r["triggers"]:
                 _assert(len(t["at"]) == 10 and t["at"][4] == "-",
@@ -656,6 +725,106 @@ def selftest() -> int:
                     (iso, kinds))
     check("원장 형식과 무관하게 ISO 로 낸다",
           _emits_iso_whatever_the_ledger_stores)
+
+    # ── 상장 포트폴리오사만 본다 ──────────────────────────────────────
+    #
+    # 이 도구는 시장 감시기가 아니다. 우리가 들고 있는 회사의 회수 판단을
+    # 돕는 물건이고, 코스닥 전체는 배경이다 (리포트 §7).
+
+    def _only_our_companies():
+        """남의 회사가 움직여도 데스크를 부르지 않는다.
+
+        재 봤다 — 코스닥 1,700종목에서 하루 ±8% 이상 움직인 것이 37개고
+        그중 우리 것은 2개였다. 좁히지 않으면 인스턴스 70개가 우리가 갖지도
+        않은 회사에 쓰이고, 그 봉투가 회수 판단 리포트에 섞인다."""
+        rows = []
+        for c in ("000660", "005930", "999998", "999999"):
+            rows += [("2026-09-10", c, "KOSDAQ", 100.0),
+                     ("2026-09-11", c, "KOSDAQ", 80.0)]       # 전부 -20%
+        con = _ledger(rows_price=rows)
+        r = scan(con, today="2026-09-11", since="2026-09-10",
+                 portfolio=_pf("000660", "005930"))
+        con.close()
+        moved = sorted(t["subject"] for t in r["triggers"]
+                       if t["kind"] == "price.move")
+        _assert(moved == ["000660", "005930"], moved)
+        _assert(r["scope"]["ok"] and r["scope"]["n_listed"] == 2, r["scope"])
+    check("우리 포트폴리오사만 소집한다", _only_our_companies)
+
+    def _limit_is_applied_after_filtering():
+        """공시가 몰린 날 우리 회사 것이 잘려 나가면 안 된다.
+
+        SQL 에서 먼저 자르면 남의 회사 공시 200건이 창을 채우고, 우리 것은
+        밀려나며 `since` 는 그 날짜를 지나 버린다 — 그 공시는 영영 안 잡힌다.
+        조용히 빠지는 쪽이다."""
+        rows = [(f"R{i:04d}", "999999", "2026-09-11", "유상증자 결정", "")
+                for i in range(50)]
+        rows.append(("R9999", "000660", "2026-09-11", "유상증자 결정", ""))
+        con = _ledger(disclosures=rows)
+        ts = scan_disclosures(con, "2026-09-10", limit=10, codes={"000660"})
+        con.close()
+        _assert([t.inputs["code"] for t in ts] == ["000660"],
+                [t.inputs["code"] for t in ts])
+    check("공시 상한은 거른 뒤에 건다", _limit_is_applied_after_filtering)
+
+    def _foreign_disclosure_is_ignored():
+        con = _ledger(disclosures=[
+            ("R1", "000660", "2026-09-11", "유상증자 결정", ""),
+            ("R2", "999999", "2026-09-11", "유상증자 결정", "")])
+        ts = scan_disclosures(con, "2026-09-10", codes={"000660"})
+        con.close()
+        _assert([t.inputs["code"] for t in ts] == ["000660"],
+                [t.inputs["code"] for t in ts])
+    check("남의 회사 공시는 부르지 않는다", _foreign_disclosure_is_ignored)
+
+    def _foreign_lockup_is_ignored():
+        con = _ledger(instruments=[("000660", "샘플", "KOSDAQ", "2026-03-20"),
+                                   ("999999", "남의회사", "KOSDAQ", "2026-03-20")])
+        ts = scan_lockups(con, "2026-09-11", codes={"000660"})
+        con.close()
+        _assert([t.subject for t in ts] == ["000660"], [t.subject for t in ts])
+    check("남의 회사 보호예수는 부르지 않는다", _foreign_lockup_is_ignored)
+
+    def _no_scope_is_not_a_quiet_day():
+        """범위를 못 정한 날은 조용한 날이 아니다.
+
+        전체를 훑으면 남의 회사까지 부르고, 조용히 넘어가면 아무도 묻지
+        않는다. 둘 다 조용히 틀린다 — 그래서 사유를 크게 적는다."""
+        con = _ledger(rows_price=[("2026-09-10", "000660", "KOSDAQ", 100.0),
+                                  ("2026-09-11", "000660", "KOSDAQ", 80.0)],
+                      macro=[("2026-09-11", "base_rate", 3.0)])
+        r = scan(con, today="2026-09-11", since="2026-09-10",
+                 portfolio=_pf(ok=False))
+        con.close()
+        kinds = {t["kind"] for t in r["triggers"]}
+        _assert("price.move" not in kinds, kinds)      # 종목 단위는 안 돈다
+        _assert("macro.update" in kinds, kinds)        # 거시는 돈다
+        _assert(r["scope"]["ok"] is False, r["scope"])
+        _assert(r["scope"]["why"] and r["scope"]["note"], r["scope"])
+    check("범위를 못 정한 날은 조용한 날이 아니다", _no_scope_is_not_a_quiet_day)
+
+    def _macro_and_papers_are_market_wide():
+        """거시와 논문 재검은 종목과 무관하다 — 좁히면 안 된다."""
+        led = {"schema": "ki.papers/2", "papers": {
+            "amihud2002": {"state": "unverified", "recheck_due": None,
+                           "question": "q2"}}}
+        con = _ledger(macro=[("2026-09-11", "base_rate", 3.0)])
+        r = scan(con, today="2026-09-11", since="2026-09-10",
+                 paper_ledger=led, portfolio=_pf(ok=False))
+        con.close()
+        kinds = {t["kind"] for t in r["triggers"]}
+        _assert({"macro.update", "paper.recheck"} <= kinds, kinds)
+    check("거시·논문은 범위와 무관하게 돈다", _macro_and_papers_are_market_wide)
+
+    def _scope_does_not_leak_codes():
+        """종목코드는 대외비다 — 산출에는 개수와 사유만 적는다."""
+        con = _ledger(rows_price=[("2026-09-11", "000660", "KOSDAQ", 100.0)])
+        r = scan(con, today="2026-09-11", since="2026-09-10",
+                 portfolio=_pf("000660", "005930"))
+        con.close()
+        _assert("codes" not in r["scope"], r["scope"])
+        _assert(set(r["scope"]) >= {"ok", "n_listed", "n_unlisted"}, r["scope"])
+    check("범위 산출에 종목코드를 싣지 않는다", _scope_does_not_leak_codes)
 
     for f in failed:
         print("  X  " + f, file=sys.stderr)
@@ -683,7 +852,11 @@ if __name__ == "__main__":
     con.row_factory = sqlite3.Row
     led = P.age_states(P.migrate(P.load())) if P.LEDGER.exists() else None
     try:
-        print(json.dumps(scan(con, today=a.today, since=a.since, paper_ledger=led),
+        # 범위는 여기서 정하지 않는다 — `scope.portfolio()` 가 watchlist.csv 를
+        # 읽어 상장 포트폴리오사를 정한다. 못 읽으면 종목 단위 소집을 하지
+        # 않고 산출의 `scope` 가 사유를 말한다.
+        print(json.dumps(scan(con, today=a.today, since=a.since,
+                              paper_ledger=led),
                          ensure_ascii=False, indent=a.indent))
     finally:
         con.close()

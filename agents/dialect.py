@@ -7,8 +7,17 @@
 진짜 원장은 다르다.
 
     date         "20260917"   KRX BAS_DD 를 문자열 그대로 (대시 없음)
-    market       "코스닥"      KRX MKT_NM 을 그대로
     index_name   "코스닥"      KRX IDX_NM 을 그대로 (ki_monitor.BENCHMARK)
+    market       표마다 다르다  ← 여기서 한 번 틀렸다
+
+`market` 은 표마다 다르다. `price_daily` 는 **영문**이고(`krx_daily_prices`
+가 영문 루프 변수로 넣고, `quant_frames` · `ingest_fundamentals` 가 영문으로
+조회한다), `instruments` 는 `MKT_TP_NM` 이라 한글일 수 있다.
+
+처음에 둘 다 한글이라고 단정하고 합성 원장을 만들었다가, 리포트가
+"KOSDAQ 원장이 비어 있습니다" 로 죽었다. **짐작이 틀렸다는 것을 짐작으로
+고치면 또 틀린다** — 그래서 `resolve_market(con, hint, table=...)` 이
+**읽을 표에** 물어본다.
 
 그대로 뒀으면 진짜 원장에서 **모든 질의가 빈 결과**를 냈을 것이다. 그리고
 빈 결과는 "원장에 없습니다" 로 나간다 — 코드가 틀렸다는 말이 아니라 자료가

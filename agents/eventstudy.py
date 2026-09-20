@@ -264,7 +264,14 @@ def run(con, key: str, market: str = "KOSDAQ", t_min: float = T_MIN,
         detail = why_idx or f"{idx_name} 지수가 원장에 없습니다"
         out["reason"] = f"{detail} — 초과수익의 기준선을 만들 수 없습니다"
         return out
-    events = _events(con, spec["anchor"], mkt_name)
+    # 상장일은 `instruments` 에서 온다. 그 표의 `market` 은 `MKT_TP_NM` 이라
+    # `price_daily` 와 **다른 말일 수 있다** — 일봉에서 푼 이름을 그대로 쓰면
+    # 0건이 나오고, 그 0건이 '상장일이 있는 종목이 없습니다' 로 나간다.
+    inst_name, why_inst = D.resolve_market(con, market, table="instruments")
+    if inst_name is None:
+        out["reason"] = f"{why_inst} (instruments.list_date)"
+        return out
+    events = _events(con, spec["anchor"], inst_name)
     if not events:
         out["reason"] = "상장일이 있는 종목이 없습니다 (instruments.list_date)"
         return out
@@ -301,7 +308,13 @@ def run(con, key: str, market: str = "KOSDAQ", t_min: float = T_MIN,
 # ── 자체 검사 ─────────────────────────────────────────────────────────
 
 # 합성 원장이 쓸 시장 이름. 진짜 원장이 쓰는 값이다 (`dialect`).
-_MKT = D.MARKET_ALIASES["KOSDAQ"][0]
+# 합성 원장이 쓸 시장 이름. **표마다 다르다** — `price_daily` 는 영문이고
+# (`krx_daily_prices` 가 영문 키로 넣는다), `instruments` 는 `MKT_TP_NM` 이라
+# 한글일 수 있다. 처음에 둘 다 한글로 만들었다가 리포트가 "KOSDAQ 원장이
+# 비어 있습니다" 로 죽었다. 섞어 두어야 `resolve_market(..., table=)` 이
+# 표마다 물어보는지가 검사에 걸린다.
+_MKT = "KOSDAQ"                                   # price_daily.market
+_MKT_INST = D.MARKET_ALIASES["KOSDAQ"][0]         # instruments.market (한글)
 
 
 def _synth(effect: float = 0.0, names: int = 120, years: int = 9,
@@ -354,7 +367,7 @@ def _synth(effect: float = 0.0, names: int = 120, years: int = 9,
     con.executemany("INSERT INTO price_daily VALUES (?,?,?,?)", rows)
     con.executemany("INSERT INTO index_daily VALUES (?,?,?)", irows)
     con.executemany("INSERT INTO instruments VALUES (?,?,?,?)",
-                    [(codes[i], "샘플", _MKT, listed[i].strftime("%Y%m%d"))
+                    [(codes[i], "샘플", _MKT_INST, listed[i].strftime("%Y%m%d"))
                      for i in range(names)])
     con.commit()
     return con
@@ -509,15 +522,22 @@ def selftest() -> int:
     # '원장에 없습니다' 로 나간다 — 코드가 틀렸다는 말이 아니라.
 
     def _reads_the_real_ledger_dialect():
+        """`market` 은 **표마다 다르다.** 일봉은 영문, 종목목록은 한글일 수
+        있다. 일봉에서 푼 이름을 종목목록에 그대로 쓰면 0건이 나오고, 그
+        0건이 '상장일이 있는 종목이 없습니다' 로 나간다."""
         con = _synth(effect=-0.02, seed=5)
         d = con.execute("SELECT date, market FROM price_daily LIMIT 1").fetchone()
+        i = con.execute("SELECT market FROM instruments LIMIT 1").fetchone()
         _assert(len(str(d[0])) == 8 and str(d[0]).isdigit(), d[0])
-        _assert(str(d[1]) == "코스닥", d[1])
+        _assert(str(d[1]) == "KOSDAQ", d[1])       # price_daily 는 영문
+        _assert(str(i[0]) == "코스닥", i[0])        # instruments 는 한글
         r = run(con, "ritter1991", market="KOSDAQ", at="2026-09-18")
         con.close()
-        _assert(r["universe"] == "코스닥", r["universe"])   # 해소된 이름을 적는다
+        _assert(r["universe"] == "KOSDAQ", r["universe"])
         _assert(r["observed"] is not None, r["reason"])
-    check("원장이 한글·YYYYMMDD 여도 읽는다", _reads_the_real_ledger_dialect)
+        _assert(r["n"] > 0, r)                     # 상장일을 실제로 찾았다
+    check("market 은 표마다 다르다 (일봉 영문 · 종목목록 한글)",
+          _reads_the_real_ledger_dialect)
 
     def _list_date_compact():
         """KRX LIST_DD 는 `20170102` 다. 3.10 의 fromisoformat 은 이것을

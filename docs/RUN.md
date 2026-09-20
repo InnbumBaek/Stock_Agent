@@ -70,7 +70,7 @@ cd stock-monitor
 python ki_monitor.py selftest        # 128개 — 측정층
 
 cd ..
-python agents/selftest.py            # 300개 — 판단층
+python agents/selftest.py            # 317개 — 판단층
 python docs/audit.py                 # 저장소 전반
 ```
 

@@ -86,23 +86,36 @@ def work_order(trigger: dict, desk: str, at: str) -> dict:
 
 
 def convene(con, at: str = None, since: str = None,
-            paper_ledger: dict = None) -> dict:
+            paper_ledger: dict = None, portfolio: dict = None) -> dict:
     """08:50 — 트리거를 훑어 작업지시서를 낸다.
 
-    트리거가 없으면 지시서도 없다. 조용한 날은 조용한 것이 정상이다."""
+    트리거가 없으면 지시서도 없다. 조용한 날은 조용한 것이 정상이다.
+
+    **다만 '조용한 날'과 '범위를 못 정한 날'은 다르다** (규칙 14). 종목을
+    보는 스캐너는 상장 포트폴리오사로 좁히는데, 그 목록을 못 읽으면 종목
+    트리거가 하나도 안 나온다 — 그것을 조용한 날로 적으면 아무도 묻지
+    않는다. `scope` 를 그대로 싣고 `note` 도 바꿔 단다."""
     at = at or date.today().isoformat()
-    scan = T.scan(con, today=at, since=since, paper_ledger=paper_ledger)
+    scan = T.scan(con, today=at, since=since, paper_ledger=paper_ledger,
+                  portfolio=portfolio)
     orders = [work_order(t, d, at) for t in scan["triggers"] for d in t["desks"]]
     cost = {k: sum(o["budget"][k] for o in orders) for k in ("tool_calls", "tokens")}
+    scope = scan.get("scope") or {}
+    note = ("작업지시서다. 판단은 여기 없다 — 지시서를 받은 인스턴스가 한다. "
+            "예산은 상한이지 목표가 아니다.")
+    if not scope.get("ok"):
+        note = (f"**범위를 못 정한 날입니다** — {scope.get('why')} "
+                f"종목 단위 소집을 하지 않았습니다. 조용한 날이 아닙니다. "
+                f"거시·논문 재검은 그대로 돌았습니다.")
     return {
         "schema": SCHEMA, "stage": "convene", "at": at, "since": scan["since"],
         "standing": scan["standing"],
+        "scope": scope,
         "triggers": scan["n"],
         "orders": orders, "n": len(orders),
         "budget_ceiling": cost,
         "idle": scan["idle"],
-        "note": ("작업지시서다. 판단은 여기 없다 — 지시서를 받은 인스턴스가 한다. "
-                 "예산은 상한이지 목표가 아니다."),
+        "note": note,
     }
 
 
@@ -372,6 +385,13 @@ def selftest() -> int:
         if not c:
             raise AssertionError(why or "거짓")
 
+    # 검사에 쓰는 상장 포트폴리오사 범위. 이 도구는 시장 감시기가 아니라서
+    # 범위 없이 돌리면 종목 단위 소집이 **하나도 안 나오는 것이 정상**이다
+    # (규칙 14). 검사가 개발자 컴퓨터의 watchlist.csv 에 기대면 안 된다.
+    PF = {"schema": "ki.scope/1", "ok": True,
+          "codes": ["000660", "005930", "111111"], "n": 3,
+          "n_unlisted": 0, "why": None}
+
     led = G._ledger()
 
     def _busy():
@@ -379,7 +399,7 @@ def selftest() -> int:
             rows_price=[("2026-09-10", "000660", "KOSDAQ", 100.0),
                         ("2026-09-11", "000660", "KOSDAQ", 88.0)],
             disclosures=[("R1", "000660", "2026-09-11", "전환가액의조정", "refix")])
-        r = convene(con, at="2026-09-11", since="2026-09-10")
+        r = convene(con, at="2026-09-11", since="2026-09-10", portfolio=PF)
         con.close()
         _assert(r["n"] == 3, r["n"])          # 공시 1 + 변동 2데스크
         _assert(all(o["desk"] in T.DESKS for o in r["orders"]))
@@ -389,7 +409,7 @@ def selftest() -> int:
     def _quiet():
         con = T._ledger(rows_price=[("2026-09-10", "000660", "KOSDAQ", 100.0),
                                     ("2026-09-11", "000660", "KOSDAQ", 100.5)])
-        r = convene(con, at="2026-09-11", since="2026-09-10")
+        r = convene(con, at="2026-09-11", since="2026-09-10", portfolio=PF)
         con.close()
         _assert(r["n"] == 0 and r["orders"] == [])
         _assert(r["budget_ceiling"]["tokens"] == 0)
@@ -398,7 +418,7 @@ def selftest() -> int:
 
     def _budget_by_tier():
         con = T._ledger(disclosures=[("R1", "000660", "2026-09-11", "기타", "")])
-        r = convene(con, at="2026-09-11", since="2026-09-10")
+        r = convene(con, at="2026-09-11", since="2026-09-10", portfolio=PF)
         con.close()
         o = r["orders"][0]
         _assert(o["tier"] == "T1")            # 공시 분류는 정형 추출이다
@@ -410,7 +430,7 @@ def selftest() -> int:
         led2 = {"papers": {"p": {"state": "unverified", "recheck_due": None,
                                  "question": "q1"}}}
         con = T._ledger()
-        r = convene(con, at="2026-09-11", paper_ledger=led2)
+        r = convene(con, at="2026-09-11", paper_ledger=led2, portfolio=PF)
         con.close()
         _assert(r["orders"][0]["tier"] == "T3")
         _assert(r["orders"][0]["budget"]["tool_calls"] == BUDGET["T3"]["tool_calls"])
@@ -419,7 +439,7 @@ def selftest() -> int:
     def _order_is_closed():
         """지시서에 원장 연결이나 남의 산출이 실리지 않는가 (격리)."""
         con = T._ledger(disclosures=[("R1", "000660", "2026-09-11", "전환가액의조정", "refix")])
-        r = convene(con, at="2026-09-11", since="2026-09-10")
+        r = convene(con, at="2026-09-11", since="2026-09-10", portfolio=PF)
         con.close()
         blob = json.dumps(r, ensure_ascii=False)          # 직렬화되는가
         _assert(blob)
@@ -436,7 +456,7 @@ def selftest() -> int:
         con = T._ledger(
             disclosures=[("R1", "000660", "2026-09-11", "전환가액의조정", "refix"),
                          ("R2", "000660", "2026-09-11", "임원소유상황보고", "insider")])
-        r = convene(con, at="2026-09-11", since="2026-09-10")
+        r = convene(con, at="2026-09-11", since="2026-09-10", portfolio=PF)
         con.close()
         ids = [o["instance"] for o in r["orders"]]
         _assert(len(ids) == len(set(ids)), ids)
@@ -497,8 +517,8 @@ def selftest() -> int:
     def _deterministic():
         rows = [("2026-09-10", "000660", "KOSDAQ", 100.0),
                 ("2026-09-11", "000660", "KOSDAQ", 88.0)]
-        a = T._ledger(rows_price=rows); ra = convene(a, at="2026-09-11", since="2026-09-10"); a.close()
-        b = T._ledger(rows_price=rows); rb = convene(b, at="2026-09-11", since="2026-09-10"); b.close()
+        a = T._ledger(rows_price=rows); ra = convene(a, at="2026-09-11", since="2026-09-10", portfolio=PF); a.close()
+        b = T._ledger(rows_price=rows); rb = convene(b, at="2026-09-11", since="2026-09-10", portfolio=PF); b.close()
         _assert(ra == rb)
     check("두 번 소집하면 같은 지시서가 나온다", _deterministic)
 
@@ -668,6 +688,34 @@ def selftest() -> int:
         _assert(BUDGET["T1"]["tokens"] < BUDGET["T2"]["tokens"] < BUDGET["T3"]["tokens"])
     check("세 급 모두 예산이 있고 위로 갈수록 크다", _tiers_all_budgeted)
 
+    def _no_scope_day_is_not_a_quiet_day():
+        """'조용한 날'과 '범위를 못 정한 날'은 다르다 (규칙 14).
+
+        종목 트리거가 하나도 안 나온 것을 조용한 날로 적으면 아무도 묻지
+        않는다 — 그게 이 저장소가 가장 무서워하는 빈칸이다."""
+        con = T._ledger(rows_price=[("2026-09-10", "000660", "KOSDAQ", 100.0),
+                                    ("2026-09-11", "000660", "KOSDAQ", 80.0)])
+        bad = {"schema": "ki.scope/1", "ok": False, "codes": [], "n": 0,
+               "n_unlisted": 0, "why": "watchlist.csv 를 읽지 못했습니다."}
+        r = convene(con, at="2026-09-11", since="2026-09-10", portfolio=bad)
+        con.close()
+        _assert(r["n"] == 0, r["n"])                    # 종목 소집은 없다
+        _assert(r["scope"]["ok"] is False, r["scope"])  # 그 사실이 실린다
+        _assert("범위를 못 정한" in r["note"], r["note"])
+        _assert("조용한 날이 아닙니다" in r["note"], r["note"])
+    check("범위를 못 정한 날을 조용한 날로 적지 않는다",
+          _no_scope_day_is_not_a_quiet_day)
+
+    def _scope_reaches_the_day_record():
+        """범위가 하루 산출에 도달해야 나중에 되짚을 수 있다."""
+        con = T._ledger(rows_price=[("2026-09-10", "000660", "KOSDAQ", 100.0),
+                                    ("2026-09-11", "000660", "KOSDAQ", 80.0)])
+        r = convene(con, at="2026-09-11", since="2026-09-10", portfolio=PF)
+        con.close()
+        _assert(r["scope"]["ok"] and r["scope"]["n_listed"] == 3, r["scope"])
+        _assert("codes" not in r["scope"], r["scope"])   # 종목코드는 대외비다
+    check("소집 산출이 범위를 싣는다", _scope_reaches_the_day_record)
+
     # ── 소집과 회수를 짝지은 채로 도는가 ──────────────────────────────
     #
     # 여기가 비어 있어서 검토 한 번에 결함 여섯이 나왔다. `publish(orders=)`
@@ -828,6 +876,9 @@ if __name__ == "__main__":
             sys.exit(1)
         con.row_factory = sqlite3.Row
         try:
+            # 범위는 여기서 정하지 않는다 — `scope.portfolio()` 가 watchlist.csv
+            # 를 읽어 상장 포트폴리오사를 정한다. 못 읽으면 종목 단위 소집을
+            # 하지 않고 산출의 `scope` 와 `note` 가 사유를 말한다.
             out = convene(con, at=a.at, since=a.since, paper_ledger=led)
         finally:
             con.close()

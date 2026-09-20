@@ -574,7 +574,13 @@ def serve(con, stdin=None, stdout=None) -> int:
 # ── 자체 검사 ─────────────────────────────────────────────────────────
 
 # 합성 원장이 쓸 시장·지수 이름. 진짜 원장이 쓰는 값이다 (`dialect`).
-_MKT = D.MARKET_ALIASES["KOSDAQ"][0]
+# 합성 원장이 쓸 시장 이름. **표마다 다르다** — `price_daily` 는 영문이고
+# (`krx_daily_prices` 가 영문 키로 넣는다), `instruments` 는 `MKT_TP_NM` 이라
+# 한글일 수 있다. 처음에 둘 다 한글로 만들었다가 리포트가 "KOSDAQ 원장이
+# 비어 있습니다" 로 죽었다. 섞어 두어야 `resolve_market(..., table=)` 이
+# 표마다 물어보는지가 검사에 걸린다.
+_MKT = "KOSDAQ"                                   # price_daily.market
+_MKT_INST = D.MARKET_ALIASES["KOSDAQ"][0]         # instruments.market (한글)
 
 
 def _ledger(tmp: Path, iso: bool = False) -> Path:
@@ -588,7 +594,7 @@ def _ledger(tmp: Path, iso: bool = False) -> Path:
     `iso=True` 는 형식이 바뀐 원장을 흉내 낸다 — 짐작하지 않고 물어보는지
     확인하는 용도다."""
     _d = (lambda v: D.iso_date(v)) if iso else (lambda v: D.norm_date(v))
-    mkt = "KOSDAQ" if iso else _MKT
+    mkt = "KOSDAQ" if iso else _MKT           # price_daily · index 는 아래서 따로
     p = tmp / "ki.sqlite"
     con = sqlite3.connect(p)
     con.executescript("""
@@ -614,10 +620,14 @@ def _ledger(tmp: Path, iso: bool = False) -> Path:
                         "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                         (_d(d), c, "샘플", mkt, 100.0, 110.0, 95.0, 100.0 + i,
                          1000.0, 100000.0, 1e11, 1e6))
+        # 지수 이름은 IDX_NM 이라 한글이다 (`ki_monitor.BENCHMARK`).
         con.execute("INSERT INTO index_daily VALUES (?,?,?,?,?,?)",
-                    (_d(d), mkt, 800.0, 810.0, 790.0, 800.0 + i))
+                    (_d(d), "KOSDAQ" if iso else D.BENCHMARK,
+                     800.0, 810.0, 790.0, 800.0 + i))
+    # instruments 는 MKT_TP_NM 이라 한글일 수 있다 — 표마다 다른 것을 검사가 본다
     con.execute("INSERT INTO instruments (code, name, market, list_date) "
-                "VALUES ('000660','샘플',?,?)", (mkt, _d("2015-01-02")))
+                "VALUES ('000660','샘플',?,?)",
+                ("KOSDAQ" if iso else _MKT_INST, _d("2015-01-02")))
     con.execute("INSERT INTO disclosure (rcept_no, code, rcept_dt, title, tags) "
                 "VALUES ('R1','000660',?,'전환가액의조정','refix')", (_d("2026-09-10"),))
     con.execute("INSERT INTO fundamental VALUES ('000660','2026Q2','rev',1.0,'KRW','DART')")
@@ -832,19 +842,25 @@ def selftest() -> int:
                               "LIMIT 1").fetchone()
             idx = raw.execute("SELECT index_name FROM index_daily "
                               "LIMIT 1").fetchone()
+            inst = raw.execute("SELECT market FROM instruments LIMIT 1").fetchone()
             raw.close()
             _assert(str(row[0]) == "20260907", row[0])
-            _assert(str(row[1]) == "코스닥", row[1])
+            # `market` 은 표마다 다르다 — 일봉은 영문, 종목목록은 한글
+            _assert(str(row[1]) == "KOSDAQ", row[1])
+            _assert(str(inst[0]) == "코스닥", inst[0])
             _assert(str(idx[0]) == "코스닥", idx[0])
         check("합성 원장이 진짜 원장의 형식이다", _fixture_is_the_real_dialect)
 
         def _english_name_finds_korean_rows():
-            """데스크는 `KOSDAQ` 으로 묻는다. 원장은 한글로 적혀 있다."""
+            """데스크는 `KOSDAQ` 으로 묻는다. 표마다 적힌 말이 다르다."""
+            # 종목 목록은 instruments(한글), 신선도는 price_daily(영문) 에서
+            # 온다. 표마다 물어보지 않으면 한쪽이 0행을 낸다.
             u = t_universe(con, "KOSDAQ")
             _assert(u["ok"] and u["n"] == 1, u)
             _assert(u["market"] == "코스닥", u["market"])
             st = t_staleness(con, "KOSDAQ")
             _assert(st["ok"] and st["rows"][0]["last_date"] == "2026-09-11", st)
+            _assert(st["rows"][0]["market"] == "KOSDAQ", st["rows"][0])
             ix = t_index_series(con, "KOSDAQ")
             _assert(ix["ok"] and ix["n"] == 5, ix)
             _assert(ix["index_name"] == "코스닥", ix["index_name"])

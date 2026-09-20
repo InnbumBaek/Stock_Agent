@@ -452,7 +452,12 @@ def run(con: sqlite3.Connection, key: str, market: str = "KOSDAQ",
 
 # 합성 원장이 쓸 시장 이름. 진짜 원장이 쓰는 값이다 — 영문을 박으면 검사가
 # 자기 가정을 다시 확인할 뿐이다.
-_MKT = D.MARKET_ALIASES["KOSDAQ"][0]
+# 합성 원장이 쓸 시장 이름. **표마다 다르다** — `price_daily` 는 영문이고
+# (`krx_daily_prices` 가 영문 키로 넣는다), `instruments` 는 `MKT_TP_NM` 이라
+# 한글일 수 있다. 처음에 둘 다 한글로 만들었다가 리포트가 "KOSDAQ 원장이
+# 비어 있습니다" 로 죽었다. 섞어 두어야 `resolve_market(..., table=)` 이
+# 표마다 물어보는지가 검사에 걸린다.
+_MKT = "KOSDAQ"                                   # price_daily.market
 
 
 def _synthetic(effect: float = 0.0, months: int = 72, names: int = 200,
@@ -462,8 +467,8 @@ def _synthetic(effect: float = 0.0, months: int = 72, names: int = 200,
     effect 는 '팩터 상위 분위가 다음 달에 더 버는 정도'다. 0 이면 아무 효과가
     없는 세계 — 거기서 통과가 나오면 그 관문은 쓸모가 없다.
 
-    **진짜 원장의 형식으로 만든다** — 날짜는 `YYYYMMDD`, 시장과 지수는 한글
-    (`dialect` 참고). 여기서 `"2019-01-01"` · `"KOSDAQ"` 으로 만들면 검사가
+    **진짜 원장의 형식으로 만든다** — 날짜는 `YYYYMMDD`, `price_daily.market`
+    은 영문, 지수(`IDX_NM`)는 한글이다 (`dialect` 참고). ISO 날짜로 만들면 검사가
     자기 가정을 다시 확인할 뿐이고, 진짜 원장에서는 모든 질의가 빈다."""
     rng = np.random.default_rng(seed)
     con = sqlite3.connect(":memory:")
@@ -788,8 +793,8 @@ def selftest() -> int:
         i = con.execute("SELECT index_name FROM index_daily LIMIT 1").fetchone()
         con.close()
         _assert(len(str(d[0])) == 8 and str(d[0]).isdigit(), d[0])
-        _assert(str(d[1]) == "코스닥", d[1])
-        _assert(str(i[0]) == "코스닥", i[0])
+        _assert(str(d[1]) == "KOSDAQ", d[1])       # price_daily 는 영문이다
+        _assert(str(i[0]) == "코스닥", i[0])        # IDX_NM 은 한글이다
     check("합성 원장이 진짜 원장의 형식이다", _fixture_is_the_real_dialect)
 
     def _english_hint_finds_korean_ledger():
@@ -797,7 +802,7 @@ def selftest() -> int:
         con = _synthetic(effect=0.03, seed=5)
         r = run(con, "amihud2002", market="KOSDAQ", at="2026-09-18")
         con.close()
-        _assert(r["universe"] == "코스닥", r["universe"])
+        _assert(r["universe"] == "KOSDAQ", r["universe"])
         _assert(r["observed"] is not None, r["reason"])
     check("영문으로 불러도 한글 원장을 찾는다", _english_hint_finds_korean_ledger)
 
@@ -822,7 +827,7 @@ def selftest() -> int:
         r = run(con, "amihud2002", market="KOSPI", at="2026-09-18")
         con.close()
         _assert(r["verdict"] == VERDICT_NONE, r)
-        _assert("코스닥" in (r["reason"] or ""), r["reason"])
+        _assert("KOSDAQ" in (r["reason"] or ""), r["reason"])
     check("시장을 못 찾으면 원장에 있는 이름을 알려 준다",
           _missing_market_says_what_is_there)
 
