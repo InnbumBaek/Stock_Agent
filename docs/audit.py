@@ -450,7 +450,12 @@ else:
     _rm = ROOT / "agents" / "README.md"
     if _rm.exists() and n_ag:
         _per = dict(re.findall(r"^(\w+)\s+(\d+) passed", ag.stdout, re.M))
-        _MOD = {"envelope": "envelope.py", "papers": "papers.py",
+        # 네 모듈(dialect · scope · watch · dispatch)이 이 표에 빠져 있었다.
+        # 가장 나중에 들어온 것들이고, 그래서 가장 자주 바뀌는 것들이다 —
+        # 검사에서 빠진 줄은 낡아도 아무도 모른다. 전부 센다.
+        _MOD = {"dialect": "dialect.py", "scope": "scope.py",
+                "watch": "watch.py", "dispatch": "dispatch.py",
+                "envelope": "envelope.py", "papers": "papers.py",
                 "replication": "replication.py", "eventstudy": "eventstudy.py",
                 "gates": "gates.py", "triggers": "triggers.py",
                 "mcp": "ki_ledger_mcp.py", "cycle": "cycle.py",
@@ -484,6 +489,69 @@ else:
                         - _noise if k not in _src)
         (ok if not _ghost else bad)(
             f"덱의 필드명이 코드에 실재한다 ({_ghost or '전부 실재'})")
+
+        # 덱 부록의 모듈별 개수. README 만 세고 덱을 안 세면 덱이 조용히
+        # 낡는다 — 실제로 `watch.py 20`(실제 21) · `envelope.py 28`(실제 29)
+        # 로 어긋나 있었고, 같은 덱의 표지가 340 이라고 적고 있어서 부록의
+        # 합(338)과 서로 달랐다. 회의에 올라가는 것은 덱이다.
+        if n_ag:
+            _per = dict(re.findall(r"^(\w+)\s+(\d+) passed", ag.stdout, re.M))
+            _deck_n = dict(re.findall(r"[├└]─ (\w+\.py)\s+\S.*?\s(\d+)'", _js))
+            _dd = []
+            for _k, _fn in _MOD.items():
+                if _fn not in _deck_n:
+                    _dd.append(f"{_fn}:줄없음")
+                elif _deck_n[_fn] != _per.get(_k):
+                    _dd.append(f"{_fn}:{_deck_n[_fn]}≠{_per.get(_k)}")
+            _sum = sum(int(v) for v in _deck_n.values())
+            if _deck_n and _sum != n_ag:
+                _dd.append(f"부록 합:{_sum}≠{n_ag}")
+            (ok if not _dd else bad)(
+                f"덱 부록의 모듈별 개수 ({_dd or '일치'})")
+
+        # 덱이 말하는 '검정 대상 논문 수'. 이벤트 러너가 들어오면서 5 → 8 이
+        # 됐는데 덱의 두 자리가 5 로 남아 있었다. 같은 슬라이드 안에서 5 와 8
+        # 이 나란히 적혀 있었고, 읽는 사람은 그 모순을 자기가 잘못 본 것으로
+        # 넘긴다. 세는 곳은 코드 하나여야 한다.
+        # 빌드가 커밋된 자리에 떨어지는가. `README` 는 파일 **이름만** 넘기는
+        # 명령을 적어 두었는데, 그 인자를 cwd 로 풀면 덱이 저장소 루트에
+        # 떨어진다 — `.gitignore` 의 `*.pptx` 가 그 자리를 덮고 예외는
+        # `docs/agentization/` 에만 걸려 있어서, 빌드는 "WROTE" 를 찍고
+        # `git status` 는 한 줄도 내지 않고 커밋된 덱은 낡은 채 남는다.
+        # 규칙 9 가 말하는 그 실패다. 여기서 실제로 한 번 겪었다.
+        _outblk = re.search(r"const OUT =.*?;", _js, re.S)
+        _ob = _outblk.group(0) if _outblk else ""
+        _obad = []
+        if not _ob:
+            _obad.append("OUT 대입 없음")
+        else:
+            if "__dirname" not in _ob:
+                _obad.append("__dirname 미사용")
+            if "basename" not in _ob:
+                _obad.append("이름만 준 인자를 덱 폴더로 풀지 않음")
+        _rd = ROOT / "docs" / "agentization" / "README.md"
+        if _rd.exists():
+            for _m in re.findall(r"node \S*build_deck\.js\s+\"([^\"]+)\"",
+                                 _rd.read_text(encoding="utf-8")):
+                if "/" in _m and not _m.startswith("docs/agentization/"):
+                    _obad.append(f"README 명령이 다른 자리로 쓴다:{_m}")
+        (ok if not _obad else bad)(
+            f"덱 빌드가 커밋된 자리에 떨어진다 ({_obad or '일치'})")
+
+        import json as _json
+        import replication as _RC
+        _pj = ROOT / "stock-monitor" / ".papers.json"
+        if _pj.exists():
+            _keys = list(_json.loads(_pj.read_text(encoding="utf-8"))["papers"])
+            _n_testable = sum(1 for k in _keys
+                              if _RC.reducibility(k)[0] in ("testable", "event_time"))
+            _said = sorted({int(m) for m in
+                            re.findall(rf"{len(_keys)}편 중 (\d+)편", _js)})
+            _pbad = [str(x) for x in _said if x != _n_testable]
+            (ok if not _pbad else bad)(
+                f"덱의 검정 대상 논문 수가 코드와 일치 "
+                f"({len(_keys)}편 중 {_n_testable}편) "
+                f"({_pbad or '일치'})")
 
     # 임계는 한 곳에서만 정해져야 한다. 문서가 다른 숫자를 말하면 그 문서가 규칙이 된다.
     import replication as _R

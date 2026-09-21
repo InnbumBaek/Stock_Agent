@@ -811,7 +811,7 @@ function sRoadmap() {
   });
 
   const outs = [["코드로 끝난 것", "스키마 · 러너 · 관문 · 트리거 · 사이클 · 되짚기 — 자체 검사 340개", GRN],
-                ["원장이 있어야 되는 것", "12편 중 5편의 실제 재현 · 채택률 · 트리거 발생률 실측", AMB],
+                ["원장이 있어야 되는 것", "12편 중 8편의 실제 재현 · 채택률 · 트리거 발생률 실측", AMB],
                 ["사람이 정할 것", "병행 2주 결과로 전환 여부 — 이 덱이 아니라 회의에서", MAG]];
   outs.forEach((o, i) => {
     const x = M + i * 4.11;
@@ -831,7 +831,7 @@ function sNext() {
     x: M, y: 0.76, w: CW, h: 0.56, fontSize: 28, bold: true, color: INK });
 
   const todo = [
-    ["재현을 진짜 원장에 물린다", "python agents/cycle.py --run  ·  12편 중 5편이 검정 대상이다. 합성 자료로는 러너가 맞다는 것까지만 확인했다.", "원장 필요", GRN],
+    ["재현을 진짜 원장에 물린다", "python agents/cycle.py --run  ·  12편 중 8편이 검정 대상이다. 합성 자료로는 러너가 맞다는 것까지만 확인했다.", "원장 필요", GRN],
     ["트리거 발생률을 역산한다", "python agents/run_day.py --stage convene  ·  원장의 공시·변동 이력으로 실제 소집 건수를 잰다. 부하 수치를 가정값에서 실측으로 바꾼다.", "원장 필요", AMB],
     ["method_papers 두 편을 Crossref 로 재대조", "hlz2016 · nw1987. 서지는 세 곳에서 일치를 봤지만 빌드 환경은 Crossref 이그레스가 막혀 규율대로의 재대조를 못 했다.", "망 필요", CYN],
     ["needs_runner 가 비었다 — 유지할지 본다", "12편 중 8편이 검정 대상이고 나머지 4편은 추정량·모형이라 원래 대상이 아니다. 새 논문이 그 칸에 걸리면 사유를 적어 넣는다.", "확인", PUR],
@@ -1256,8 +1256,8 @@ function sAppendix() {
     '├─ agents/               ← 들어감 (자체 검사 340개)',
     '│   ├─ dialect.py           원장의 말 (형식을 묻는다)  15',
     '│   ├─ scope.py             상장 포트폴리오사 범위      8',
-    '│   ├─ watch.py             주가 모니터링 (매일)       20',
-    '│   ├─ envelope.py          봉투 스키마 · 검증기      28',
+    '│   ├─ watch.py             주가 모니터링 (매일)       21',
+    '│   ├─ envelope.py          봉투 스키마 · 검증기      29',
     '│   ├─ papers.py            논문 장부 ki.papers/2    23',
     '│   ├─ replication.py       분위 러너 (달력 시간)    29',
     '│   ├─ eventstudy.py        이벤트 러너 (사건 시간)   19',
@@ -1869,8 +1869,16 @@ sWall();           sRbac();        sEnvelope();     sGates();     sScorecard();
 sStack();          sMcp();         sSpec();         sDay();       sRoadmap();  sRisk();   sNext();
 sAppendix();
 
-const OUT = process.argv[2] ||
-  path.join(__dirname, "Stock_Agent_에이전트화_계획안.pptx");
+// 이름만 준 인자는 **이 파일 옆**으로 푼다. cwd 로 풀면 저장소 루트에
+// 떨어지는데, `.gitignore` 의 `*.pptx` 가 그 자리를 덮고 예외는
+// `docs/agentization/` 에만 걸려 있다 — 빌드는 "WROTE" 를 찍고, 커밋된 덱은
+// 그대로 낡은 채 남고, `git status` 는 한 줄도 내지 않는다. 규칙 9 가 말하는
+// 그 실패이고, README 에 적힌 명령이 정확히 그 모양이다.
+// 경로를 준 인자(디렉터리가 붙은 것)는 그대로 쓴다.
+const _arg = process.argv[2];
+const OUT = _arg
+  ? (path.basename(_arg) === _arg ? path.join(__dirname, _arg) : _arg)
+  : path.join(__dirname, "Stock_Agent_에이전트화_계획안.pptx");
 pres.writeFile({ fileName: OUT })
   .then(f => console.log("WROTE " + f))
   .catch(e => { console.error(e); process.exit(1); });
