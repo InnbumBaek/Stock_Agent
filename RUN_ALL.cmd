@@ -11,13 +11,9 @@ rem  파이썬이 "그런 파일이 없습니다" 만 뱉고 끝난다. 그 화�
 rem  알 수 없어서 여기서 먼저 잡는다.
 if not exist "%~dp0stock-monitor\ki_monitor.py" (
   echo.
-  echo  [X] 압축 파일 안에서 바로 실행하신 것 같습니다.
-  echo.
+  echo  [X] 압축 파일 안에서 바로 실행하신 것 같습니다 - 폴더에 먼저 푸십시오.
   echo      지금 위치 : %~dp0
   echo      찾는 파일 : stock-monitor\ki_monitor.py  ^(없습니다^)
-  echo.
-  echo      zip 을 폴더에 먼저 **푸신 뒤**, 풀린 폴더 안의
-  echo      RUN_ALL.cmd 를 실행하십시오.
   echo      예^) C:\Users\%USERNAME%\Stock-Agent\RUN_ALL.cmd
   echo.
   pause
@@ -374,7 +370,6 @@ exit /b 0
 
 
 :stage
-call :say ""
 call :say "  [%~1] %~2"
 exit /b 0
 
