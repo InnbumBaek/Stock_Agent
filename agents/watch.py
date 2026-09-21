@@ -111,18 +111,25 @@ def _bars(con, code: str, at: str = None, limit: int = W_52W + 5) -> tuple:
         rows = con.execute(q, p).fetchall()
     except sqlite3.Error:
         return [], 0, None
-    market = next((r["market"] for r in rows if r["market"]), None)
+    # **칼럼을 자리로 읽는다.** 이름으로 읽으면 부르는 쪽이 row_factory 를
+    # sqlite3.Row 로 맞춰 놓았을 때만 돈다. 검사는 전부 맞춰 놓고 열어서
+    # 20개가 통과했는데, 그냥 연 원장으로 부르면 TypeError 가 나고 그 예외는
+    # scan → convene 까지 올라가 **그날 아무도 소집되지 않는다** (거래정지
+    # 때와 같은 사고다). SELECT 가 자리를 정하니 자리로 읽으면 어느 쪽으로
+    # 열어도 같다 — sqlite3.Row 도 정수 첨자를 받는다.
+    _D, _C, _V, _M = 0, 1, 2, 3
+    market = next((r[_M] for r in rows if r[_M]), None)
     out, halted = [], 0
     for r in rows:
-        c = r["close"]
+        c = r[_C]
         # 종가가 없는 날은 거래정지로 **추정**한다. 단정하지 않는다 — 원장은
         # 정지 사유를 담지 않는다. 다만 세지 않고 버리면 "20일 중 16일 정지"
         # 가 "평소처럼 거래됐다" 로 읽힌다.
         if c is None or c <= 0:
             halted += 1
             continue
-        out.append({"date": D.iso_date(r["date"]), "close": float(c),
-                    "value": r["value"]})
+        out.append({"date": D.iso_date(r[_D]), "close": float(c),
+                    "value": r[_V]})
     out.reverse()
     return out, halted, market
 
@@ -646,6 +653,29 @@ def selftest() -> int:
         con.close()
         _assert(before == after)
     check("원장을 읽기만 한다", _reads_only)
+
+    def _plain_connection_works():
+        """그냥 연 원장으로도 돈다 — row_factory 를 부르는 쪽에 기대지 않는다.
+
+        검사는 전부 `sqlite3.Row` 로 열어 놓고 부른다. 그래서 이름으로 칼럼을
+        읽는 코드가 스무 개를 전부 통과했는데, 데모에서 그냥 연 원장으로
+        부르니 TypeError 가 났다. 그 예외는 scan → convene 까지 올라가서
+        **그날 아무도 소집되지 않는다** — 거래정지 때와 같은 모양의 사고다.
+        여기서 한 번 그냥 열어 본다."""
+        rows = _series()
+        con = sqlite3.connect(":memory:")            # row_factory 를 안 건드린다
+        con.execute("CREATE TABLE price_daily (date TEXT, code TEXT, "
+                    "market TEXT, close REAL, value REAL, "
+                    "PRIMARY KEY (date, code))")
+        con.executemany("INSERT INTO price_daily VALUES (?,?,?,?,?)", rows)
+        con.commit()
+        snap = snapshot(con, at=D.iso_date(rows[-1][0]),
+                        portfolio=_pf("000660"))
+        con.close()
+        r = snap["rows"][0]
+        _assert(r["ret"]["3m"] is not None, r)
+        _assert(r["market"] == "KOSDAQ", r.get("market"))
+    check("그냥 연 원장으로도 돈다", _plain_connection_works)
 
     for f in failed:
         print("  X  " + f, file=sys.stderr)

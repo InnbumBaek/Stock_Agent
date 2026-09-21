@@ -13,7 +13,7 @@
 ```
 dialect.py        원장의 말 — 저장된 형식을 짐작하지 않고 물어본다      15
 scope.py          누구를 보는가 — 상장 포트폴리오사                      8
-watch.py          주가 모니터링 — 사건이 없어도 매일 잰다                20
+watch.py          주가 모니터링 — 사건이 없어도 매일 잰다                21
 envelope.py       모든 주장이 입는 형식 (측정값 + 등급 + 가정 + 한계)   29
 papers.py         논문 장부 ki.papers/2 — 네 상태 · append-only        23
 replication.py    분위 러너 — 달력 시간. 결정적이다                     29
@@ -27,7 +27,7 @@ reconcile.py      대조 — 두 데스크의 판정이 갈렸는가            
 run_day.py        하루 운영 — 소집 · 발행 · 승격                       38
 scorecard.py      계측. 고치지는 않는다                               16
 replay.py         되짚기 — 봉투가 읽은 것과 지금 원장을 대조          15
-                                                            합계  339
+                                                            합계  340
 ```
 
 `dialect.py` 가 맨 위에 있는 이유는 그것이 맨 아래에 깔려 있기 때문이다.
@@ -45,7 +45,7 @@ replay.py         되짚기 — 봉투가 읽은 것과 지금 원장을 대조 
 ## 검증
 
 ```bash
-python agents/selftest.py          # 339개. 키·네트워크·원장 없이 돈다
+python agents/selftest.py          # 340개. 키·네트워크·원장 없이 돈다
 python agents/gates.py --selftest  # 모듈 하나만 돌릴 수도 있다
 python docs/audit.py               # 정의 파일이 코드와 어긋나지 않는지
 ```

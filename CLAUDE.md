@@ -380,7 +380,7 @@ DART 인증키가 든 무단 봉투 하나가 발행을 멈추지 못하고 통�
 
 ```bash
 cd stock-monitor && python ki_monitor.py selftest   # 128개 (키·네트워크 불필요)
-python agents/selftest.py                           # 339개 (판단층)
+python agents/selftest.py                           # 340개 (판단층)
 python docs/audit.py                                # 저장소 전반
 ```
 
