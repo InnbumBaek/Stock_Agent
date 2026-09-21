@@ -538,7 +538,8 @@ for f in _AG:
 print("\n[12] 상장 포트폴리오사만 보는가")
 
 _TRG = (ROOT / "agents" / "triggers.py").read_text(encoding="utf-8")
-_SCOPED = ("scan_disclosures", "scan_price_moves", "scan_lockups")
+_SCOPED = ("scan_disclosures", "scan_price_moves", "scan_lockups",
+           "scan_watch")
 _unscoped = []
 for _fn in _SCOPED:
     m = re.search(rf"def {_fn}\((.*?)\)\s*->", _TRG, re.S)
@@ -548,7 +549,12 @@ for _fn in _SCOPED:
     # 인자만 받고 안 쓰면 아무 일도 하지 않는다 — 본문에서 거르는지 본다
     body = _TRG[m.end():]
     body = body[:body.find("\ndef ")] if "\ndef " in body else body
-    if "codes is not None" not in body:
+    # 좁히는 방식은 둘이고 뜻이 다르다. `codes is not None` 은 목록이 있으면
+    # 거른다는 것이고, `codes is None` 은 범위를 못 정했으면 아예 돌지 않는다는
+    # 것이다(규칙 14). 뒤엣것이 더 엄하다 — 한쪽만 인정하면 더 엄한 쪽을 쓴
+    # 스캐너가 '안 거른다'로 잡힌다. 인자를 쓰기만 하면 되는 게 아니라
+    # **분기에 써야** 한다.
+    if not any(p in body for p in ("codes is not None", "codes is None")):
         _unscoped.append(f"{_fn}: codes 를 받기만 하고 거르지 않음")
 (ok if not _unscoped else bad)(
     f"종목 스캐너가 포트폴리오사로 좁힌다 ({_unscoped or '전부 좁힘'})")
@@ -566,6 +572,50 @@ _after = _TRG.split("scope_row")
     "범위 산출에 종목코드를 싣지 않는다")
 (ok if "_watchlist" in _SCOPE_SRC else bad)(
     "범위는 측정층의 watchlist 파서를 쓴다")
+
+# ── [13] 주가 모니터링이 사건 없이도 도는가 ──────────────────────────
+#
+# 트리거의 MOVE_PCT 는 **하루** 변동이다. 그것만 보면 천천히 빠지는 종목이
+# 통째로 안 보인다 — 재 봤더니 6개월 -58%, 최악의 하루 -3.6%, 트리거 0건.
+# 반토막이 나는 동안 아무도 안 봤다.
+#
+# 이 검사가 없으면 누군가 scan_watch 를 scan() 에서 빼도 테스트는 전부
+# 통과한다. 합성 원장의 종목들은 얌전해서 어차피 안 걸리기 때문이다.
+
+print("\n[13] 주가 모니터링이 사건 없이도 도는가")
+
+import triggers as _TRG_MOD                        # noqa: E402
+_TRIG_DESKS = set(_TRG_MOD.DESKS)
+_W_ALL = (ROOT / "agents" / "watch.py").read_text(encoding="utf-8")
+# **산출부만 본다.** 자체 검사에는 금지어 목록이 그대로 들어 있어서, 파일
+# 전체를 낱말로 훑으면 검사가 자기 검사에 걸린다 — 같은 실수를 다섯 번 했다.
+_W = _W_ALL.split("# ── 자체 검사")[0]
+_T2 = (ROOT / "agents" / "triggers.py").read_text(encoding="utf-8")
+
+(ok if "scan_watch(con, today, codes=codes)" in _T2 else bad)(
+    "소집이 주가 모니터링을 부른다 (scan_watch)")
+
+# 세 소집이 전부 실재하는 데스크로 가는가
+_wr = re.search(r"WATCH_ROUTES\s*=\s*\{(.*?)\n\}", _T2, re.S)
+_bad_route = []
+if not _wr:
+    _bad_route.append("WATCH_ROUTES 없음")
+else:
+    for _m in re.finditer(r'"([a-z0-9.]+)":\s*\(([^)]*)\)', _wr.group(1)):
+        for _d in re.findall(r'"([a-z0-9-]+)"', _m.group(2)):
+            if _d not in _TRIG_DESKS:
+                _bad_route.append(f"{_m.group(1)}→{_d}")
+(ok if not _bad_route else bad)(
+    f"주가 모니터링 소집이 실재하는 데스크로 간다 ({_bad_route or '전부 실재'})")
+
+# 임계가 사내 기준으로 표시되는가 — 논문·제도인 척하면 안 된다 (규칙 4)
+(ok if '"grade": "사내"' in _W else bad)("임계가 사내 기준으로 표시된다")
+
+# 재기만 하는가 — 산출 문자열에 판정 어휘가 없어야 한다 (규칙 1)
+_judge = [w for w in ("매수", "매도", "추천", "목표가", "저평가", "고평가",
+                      "비중확대")
+          if re.search(rf'"[^"]*{w}[^"]*"', _W)]
+(ok if not _judge else bad)(f"주가 모니터링에 판정 어휘가 없다 ({_judge or '없음'})")
 
 print("\n" + "=" * 60)
 if fails:

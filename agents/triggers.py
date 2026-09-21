@@ -27,6 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import dialect as D                                      # noqa: E402
 import scope as SC                                       # noqa: E402
+import watch as W                                        # noqa: E402
 
 SCHEMA = "ki.triggers/1"
 
@@ -225,6 +226,46 @@ def scan_lockups(con, today: str, warn_d: int = LOCKUP_WARN_D,
     return out
 
 
+# 주가 모니터링에서 나온 것 → 어느 데스크가 볼 일인가.
+#
+#   price.drift    회수 계획의 목표 회수액 자체가 달라진다 → q1 · q2
+#   liquidity.dry  처분 소요일수의 전제가 달라진다 → q2 · q3
+#   price.low52    진척을 다시 봐야 한다 → q1
+WATCH_ROUTES = {
+    "price.drift": ("q1-progress", "q2-disposal"),
+    "liquidity.dry": ("q2-disposal", "q3-execution"),
+    "price.low52": ("q1-progress",),
+}
+
+
+def scan_watch(con, today: str, codes: set = None,
+               market: str = "KOSDAQ") -> list[Trigger]:
+    """상장 포트폴리오사 주가 모니터링에서 나온 소집 (`watch.py`).
+
+    `scan_price_moves` 는 **하루** 변동만 본다. 그래서 천천히 빠지는 종목이
+    통째로 안 보였다 — 재 봤더니 6개월 -58%, 최악의 하루 -3.6%, 트리거 0건
+    이었다. 반토막이 나는 동안 아무도 안 봤고, 그 구간이 아직 팔 수 있는
+    구간이다.
+
+    범위를 못 정했으면 돌지 않는다 — 이것도 종목 단위다 (규칙 14)."""
+    if codes is None:
+        return []
+    pf = {"schema": "ki.scope/1", "ok": True, "codes": sorted(codes),
+          "n": len(codes), "n_unlisted": 0, "why": None}
+    snap = W.snapshot(con, at=today, portfolio=pf, market=market)
+    out = []
+    for f in W.findings(snap):
+        desks = WATCH_ROUTES.get(f["kind"])
+        if not desks:
+            continue
+        out.append(Trigger(
+            f["kind"], f["code"], desks,
+            {"code": f["code"], "asof": f["asof"], "value": f["value"],
+             "unit": f["unit"], "threshold_grade": "사내"},
+            f["why"], today, tier="T2"))
+    return out
+
+
 def scan_macro(con, since: str) -> list[Trigger]:
     """거시 지표가 갱신됐다. 국면 서술이 달라질 수 있다. 하루 한 번만."""
     # `macro_daily` 는 한 형식이 아니다. KRX 경로는 `"20260911"`, FRED 경로는
@@ -307,6 +348,7 @@ def scan(con, today: str = None, since: str = None,
         ts += scan_disclosures(con, since, codes=codes)
         ts += scan_price_moves(con, since, codes=codes)
         ts += scan_lockups(con, today, codes=codes)
+        ts += scan_watch(con, today, codes=codes)
     # 거시·논문은 종목과 무관하다. 범위를 못 정했어도 이쪽은 돈다.
     ts += scan_macro(con, since)
     ts += scan_paper_rechecks(paper_ledger or {}, today, recheck_cap)
@@ -378,6 +420,7 @@ def _ledger(rows_price=(), disclosures=(), instruments=(), macro=(),
     con.row_factory = sqlite3.Row
     con.executescript("""
     CREATE TABLE price_daily (date TEXT, code TEXT, market TEXT, close REAL,
+      value REAL, adj_factor REAL DEFAULT 1.0,
       PRIMARY KEY (date, code));
     CREATE TABLE disclosure (rcept_no TEXT PRIMARY KEY, code TEXT, rcept_dt TEXT,
       title TEXT, tags TEXT);
@@ -386,8 +429,11 @@ def _ledger(rows_price=(), disclosures=(), instruments=(), macro=(),
     CREATE TABLE macro_daily (date TEXT, key TEXT, value REAL,
       PRIMARY KEY (date, key));
     """)
-    con.executemany("INSERT INTO price_daily (date, code, market, close) VALUES (?,?,?,?)",
-                    [(_d(d), c, _m(m), px) for d, c, m, px in rows_price])
+    # 거래대금이 없으면 주가 모니터링이 조용히 아무 일도 안 한다 — 그 상태로
+    # 검사가 전부 통과한다. 평시 값 하나를 넣어 둔다.
+    con.executemany("INSERT INTO price_daily (date, code, market, close, value) "
+                    "VALUES (?,?,?,?,?)",
+                    [(_d(d), c, _m(m), px, 1.0e8) for d, c, m, px in rows_price])
     con.executemany("INSERT INTO disclosure VALUES (?,?,?,?,?)",
                     [(no, c, _d(dt), t, g) for no, c, dt, t, g in disclosures])
     con.executemany("INSERT INTO instruments VALUES (?,?,?,?)",
@@ -766,6 +812,41 @@ def selftest() -> int:
         _assert([t.inputs["code"] for t in ts] == ["000660"],
                 [t.inputs["code"] for t in ts])
     check("공시 상한은 거른 뒤에 건다", _limit_is_applied_after_filtering)
+
+    def _slow_bleed_convenes_a_desk():
+        """하루 변동 임계로는 안 걸리는 구간에서도 데스크가 불린다.
+
+        이게 없으면 반토막이 나는 동안 아무도 안 본다 — 재 봤더니 6개월
+        -58% 에 트리거 0건이었다."""
+        con = _ledger(rows_price=[])
+        con.executemany(
+            "INSERT INTO price_daily (date, code, market, close, value) "
+            "VALUES (?,?,?,?,?)", W._series(code="000660", market=_MKT))
+        con.commit()
+        # 임계를 **넘는 날**에 부른다. 넘은 채로 있는 동안은 다시 부르지
+        # 않으므로(`watch.RECROSS_D`), 아무 날이나 고르면 안 걸린다.
+        rows = W._series(code="000660", market=_MKT)
+        ts = scan_watch(con, D.iso_date(rows[65][0]), codes={"000660"})
+        con.close()
+        kinds = {t.kind for t in ts}
+        _assert("price.drift" in kinds, kinds)
+        t = [x for x in ts if x.kind == "price.drift"][0]
+        _assert("q1-progress" in t.desks and "q2-disposal" in t.desks, t.desks)
+        _assert(t.inputs["threshold_grade"] == "사내", t.inputs)
+        # 하루 변동 스캐너는 같은 자료에서 아무것도 못 잡는다
+        _assert(scan_price_moves(con2 := _ledger(rows_price=[
+            ("2026-07-17", "000660", "KOSDAQ", 100.0),
+            ("2026-07-20", "000660", "KOSDAQ", 99.5)]),
+            "2026-07-17", codes={"000660"}) == [])
+        con2.close()
+    check("천천히 빠지는 구간도 데스크를 부른다", _slow_bleed_convenes_a_desk)
+
+    def _watch_needs_scope_too():
+        """주가 모니터링도 종목 단위다 — 범위를 못 정했으면 돌지 않는다."""
+        con = _ledger(rows_price=[("2026-07-20", "000660", "KOSDAQ", 100.0)])
+        _assert(scan_watch(con, "2026-07-20", codes=None) == [])
+        con.close()
+    check("범위가 없으면 주가 모니터링도 돌지 않는다", _watch_needs_scope_too)
 
     def _foreign_disclosure_is_ignored():
         con = _ledger(disclosures=[
