@@ -290,6 +290,32 @@ for h in hit:
     if was.returncode != 0 or not any(n in was.stdout for n in NAMES):
         added.append(p)
 (ok if not added else bad)(f"통합이 새로 넣은 실명 — {added or '없음'}")
+
+# 위 검사는 watchlist.csv 가 있어야 돈다. 그 파일은 .gitignore 대상이라
+# 새로 푼 폴더·CI·원격 컨테이너에는 없고, 그때 검사는 '건너뜀' 한 줄만 남긴다.
+# 실제로 그렇게 오래 숨어 있었다 — ki_monitor.py 의 주석에 포트폴리오사의
+# 약칭과 정식명이 실명으로 적혀 있었는데, 워치리스트를 넣고 감사를 돌린
+# 날에야 처음 잡혔다.
+#
+# 그래서 목록 없이도 도는 검사를 하나 더 둔다. 이름을 적지 않고 **모양**만
+# 본다 — "약칭(...)" · "정식명(...)" · "회사명(...)" 처럼 괄호 안에 한글
+# 고유명사를 예로 드는 자리다. 설명에 실명이 필요한 적은 없다.
+_SHAPE = re.compile(r"(약칭|정식명|회사명|종목명|사명)\s*[(（]\s*[가-힣]{2,}")
+_shape_hits = []
+for _p in sorted(ROOT.rglob("*.py")):
+    if any(x in _p.parts for x in (".git", "node_modules", "out", "logs")):
+        continue
+    try:
+        _t = _p.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError):
+        continue
+    # 이 감사기 자신의 무늬 정의에 걸리지 않게 산출부만 본다.
+    if _p.name == "audit.py":
+        continue
+    for _m in _SHAPE.finditer(_t):
+        _shape_hits.append(f"{_p.relative_to(ROOT)}:{_t[:_m.start()].count(chr(10))+1}")
+(ok if not _shape_hits else bad)(
+    f"실명을 예로 든 자리 — {_shape_hits or '없음'}")
 if hit and not added:
     print(f"     (원본에 이미 있던 파일 {len(hit)}건은 제외)")
 

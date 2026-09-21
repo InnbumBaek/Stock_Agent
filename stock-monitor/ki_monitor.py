@@ -2824,117 +2824,291 @@ QUANT_TEMPLATE = """<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 {refresh_meta}
 <title>포트폴리오 회수 판단 리포트 {as_of}</title><style>
-:root {{ --ink:#1A1A1A; --navy:#1B365D; --grey:#5A6470; --line:#D3D8DE;
-  --bg:#FFFFFF; --panel:#F4F6F9; --pos:#B02A37; --neg:#1F5FA8; --warn:#8A6A1F; }}
-* {{ box-sizing: border-box; }}
-body {{ font-family:"Malgun Gothic","Noto Sans KR",sans-serif; font-size:13px;
-  color:var(--ink); background:var(--bg); margin:0; padding:0 24px 60px;
-  line-height:1.55; }}
-.wrap {{ max-width:1240px; margin:0 auto; }}
-h1 {{ font-size:27px; color:var(--navy); margin:0 0 4px; letter-spacing:-.4px; }}
-h2 {{ font-size:17px; color:var(--navy); margin:44px 0 14px; padding:0 0 8px;
-  border-bottom:2px solid var(--navy); scroll-margin-top:58px;
-  display:flex; align-items:baseline; gap:9px; }}
-h2::before {{ content:counter(sec); counter-increment:sec; font-size:12px;
-  background:var(--navy); color:#fff; border-radius:3px; padding:2px 8px;
-  font-weight:700; }}
-body {{ counter-reset:sec; }}
-h3 {{ font-size:12.5px; color:var(--navy); margin:18px 0 7px; font-weight:700;
-  border-left:3px solid var(--line); padding-left:8px; }}
-nav {{ position:sticky; top:0; z-index:30; background:rgba(255,255,255,.97);
-  border-bottom:1px solid var(--line); padding:9px 0; margin-bottom:8px;
-  display:flex; flex-wrap:wrap; gap:5px; backdrop-filter:blur(6px); }}
-nav a {{ font-size:11.5px; color:var(--navy); text-decoration:none;
-  border:1px solid var(--line); border-radius:12px; padding:3px 10px;
-  white-space:nowrap; }}
-nav a:hover {{ background:var(--navy); color:#fff; border-color:var(--navy); }}
-.sub {{ color:var(--grey); font-size:12px; margin-bottom:16px; }}
-.wm {{ background:#FDECEE; border:1px solid #8C2332; color:#8C2332;
-  padding:8px 12px; font-weight:bold; margin-bottom:16px; font-size:12px; }}
-.kv {{ display:flex; flex-wrap:wrap; gap:14px; margin-bottom:14px; }}
-.kv>div {{ flex:1 1 150px; border-top:3px solid var(--navy); padding:8px 2px;
-  background:var(--panel); padding-left:10px; }}
-.kv b {{ display:block; font-size:20px; color:var(--navy); }}
-.kv span {{ font-size:11px; color:var(--grey); }}
-.tw {{ overflow-x:auto; margin-bottom:10px; border:1px solid var(--line);
-  border-radius:4px; -webkit-overflow-scrolling:touch; }}
+/* ─────────────────────────────────────────────────────────────
+   회수 판단 리포트 — 판(版) 설계
+
+   투자심의 자료로 읽히고 인쇄되는 문서다. 화면용 대시보드가 아니다.
+   그래서 세 가지를 지킨다.
+
+     1) 한 줄의 길이를 재어 둔다. 본문 설명은 74자 근처에서 끊는다.
+        표는 넓어도 되지만 읽는 글은 넓으면 눈이 줄을 잃는다.
+     2) 여백이 곧 위계다. 색과 굵기를 더하는 대신 간격으로 나눈다.
+        8px 배수 하나로 통일했다 — 제각각인 여백이 아마추어처럼 보인다.
+     3) 숫자는 자리를 맞춘다. tabular-nums 로 고정폭을 강제하고
+        소수점 자리를 세로로 세운다. 표의 숫자가 흔들리면 못 읽는다.
+
+   표 머리를 남색으로 꽉 채우지 않는다. 절마다 남색 띠가 서너 개씩
+   들어가면 강조가 강조를 잡아먹는다. 얇은 밑줄 하나로 충분하다.
+   ───────────────────────────────────────────────────────────── */
+:root {{
+  /* 잉크 — 검정 대신 아주 짙은 남빛 회색. 종이에서 눈이 덜 아프다. */
+  --ink:#141A21; --ink-2:#3C4650; --ink-3:#6B7683; --ink-4:#98A2AE;
+  --navy:#12355B; --navy-2:#1E4C7C; --navy-soft:#EEF2F7;
+  /* 한국 시장 관행 — 상승 적색, 하락 청색 */
+  --up:#C0392B; --down:#1B5E9E;
+  --warn:#8A6A1F; --warn-bg:#FDF8EC; --conf:#7D2230;
+  --paper:#FFFFFF; --panel:#F7F8FA; --panel-2:#EDF0F4;
+  --rule:#E3E7EC;        /* 실선 — 표의 행 구분 */
+  --rule-2:#C7CED7;      /* 진한 실선 — 묶음의 경계 */
+  --sp:8px;
+  /* 읽는 글의 최대 폭. ch 로 재면 한글에서 절반으로 줄어든다 —
+     '0' 자 폭 기준이라 74ch 가 한글 45자쯤이 되고, 두 줄짜리
+     설명이 한 줄 반으로 토막난다. 글자 수가 아니라 길이로 잰다. */
+  --measure:820px;
+}}
+* {{ box-sizing:border-box; }}
+html {{ -webkit-text-size-adjust:100%; }}
+body {{
+  font-family:"Pretendard Variable",Pretendard,-apple-system,BlinkMacSystemFont,
+    "Segoe UI","Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",sans-serif;
+  font-size:13.5px; line-height:1.62; color:var(--ink); background:var(--panel-2);
+  margin:0; padding:0; letter-spacing:-.005em;
+  font-feature-settings:"tnum" 1,"case" 1;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  counter-reset:sec;
+}}
+.wrap {{
+  max-width:1200px; margin:0 auto; background:var(--paper);
+  padding:0 40px 72px; box-shadow:0 0 0 1px var(--rule),0 2px 18px rgba(20,26,33,.06);
+}}
+
+/* ── 표제부 ───────────────────────────────────────────────── */
+.mast {{ padding:34px 0 0; border-bottom:2px solid var(--navy); margin-bottom:0; }}
+.mast-top {{ display:flex; justify-content:space-between; align-items:flex-start;
+  gap:24px; margin-bottom:22px; }}
+.eyebrow {{ font-size:11px; font-weight:700; letter-spacing:.14em; color:var(--navy-2);
+  text-transform:uppercase; margin-bottom:9px; }}
+h1 {{ font-size:31px; line-height:1.22; font-weight:800; color:var(--ink);
+  margin:0 0 7px; letter-spacing:-.022em; }}
+.standfirst {{ font-size:14px; color:var(--ink-2); max-width:var(--measure);
+  margin:0 0 4px; }}
+.seal {{ flex:0 0 auto; text-align:right; }}
+.seal b {{ display:inline-block; border:1.5px solid var(--conf); color:var(--conf);
+  font-size:11px; font-weight:800; letter-spacing:.1em; padding:5px 11px;
+  border-radius:2px; white-space:nowrap; }}
+.seal span {{ display:block; font-size:10.5px; color:var(--ink-3); margin-top:7px;
+  max-width:230px; line-height:1.5; }}
+
+/* 서지사항 — 라벨/값 격자. 한 줄 문장으로 늘어놓으면 안 읽힌다. */
+.meta {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(132px,1fr));
+  gap:0; border-top:1px solid var(--rule); margin:0; padding:0; }}
+.meta div {{ padding:11px 16px 13px 0; border-right:1px solid var(--rule); }}
+.meta div:last-child {{ border-right:0; }}
+.meta dt {{ font-size:10px; font-weight:700; letter-spacing:.09em; color:var(--ink-4);
+  text-transform:uppercase; margin:0 0 3px; }}
+.meta dd {{ font-size:13.5px; font-weight:650; color:var(--ink); margin:0;
+  font-variant-numeric:tabular-nums; }}
+
+/* ── 목차 레일 ────────────────────────────────────────────── */
+nav {{ position:sticky; top:0; z-index:40; background:rgba(255,255,255,.94);
+  backdrop-filter:saturate(1.6) blur(8px); border-bottom:1px solid var(--rule-2);
+  display:flex; flex-wrap:wrap; gap:0 2px; padding:7px 0; margin:0 0 4px; }}
+nav a {{ font-size:11.5px; font-weight:600; color:var(--ink-3); text-decoration:none;
+  padding:5px 11px; border-radius:3px; white-space:nowrap; letter-spacing:-.01em;
+  transition:color .12s,background .12s; }}
+nav a:hover {{ color:var(--navy); background:var(--navy-soft); }}
+
+/* ── 절 ───────────────────────────────────────────────────── */
+h2 {{ font-size:19px; font-weight:750; color:var(--ink); letter-spacing:-.02em;
+  margin:52px 0 0; padding:0 0 10px; border-bottom:1px solid var(--rule-2);
+  scroll-margin-top:56px; display:flex; align-items:baseline; gap:11px;
+  position:relative; }}
+h2::before {{ counter-increment:sec; content:counter(sec,decimal-leading-zero);
+  font-size:12px; font-weight:800; color:var(--navy-2); letter-spacing:.04em;
+  font-variant-numeric:tabular-nums; }}
+h2::after {{ content:""; position:absolute; left:0; bottom:-1px; width:56px;
+  height:2px; background:var(--navy); }}
+h3 {{ font-size:13px; font-weight:750; color:var(--navy); margin:26px 0 9px;
+  letter-spacing:-.01em; }}
+.lead {{ font-size:13px; color:var(--ink-2); max-width:var(--measure);
+  margin:14px 0 20px; }}
+
+/* ── 읽는 순서 ────────────────────────────────────────────── */
+.flow {{ font-size:12px; color:var(--ink-2); background:var(--panel);
+  border:1px solid var(--rule); border-left:3px solid var(--navy);
+  padding:11px 16px; margin:22px 0 0; border-radius:0 3px 3px 0; }}
+.flow b {{ color:var(--navy); font-weight:700; }}
+
+/* ── 경고 · 상태 ──────────────────────────────────────────── */
+.wm {{ background:var(--warn-bg); border:1px solid #E2CE9B; color:#6E5316;
+  padding:9px 14px; font-weight:700; font-size:12px; border-radius:3px;
+  margin:18px 0 0; }}
+.flag {{ background:var(--warn-bg); border-left:3px solid var(--warn);
+  padding:10px 15px; font-size:12.5px; margin:12px 0; color:#5E4712;
+  border-radius:0 3px 3px 0; }}
+.conf {{ display:none; }}   /* 상단 봉인으로 옮겼다 — 같은 말을 두 번 하지 않는다 */
+
+/* ── 계수 띠 ──────────────────────────────────────────────── */
+.kv {{ display:flex; flex-wrap:wrap; gap:0; border:1px solid var(--rule);
+  border-radius:4px; overflow:hidden; margin:18px 0; background:var(--paper); }}
+.kv>div {{ flex:1 1 170px; padding:15px 18px 16px;
+  border-right:1px solid var(--rule); border-top:0; background:var(--paper); }}
+.kv>div:last-child {{ border-right:0; }}
+.kv b {{ display:block; font-size:25px; font-weight:750; color:var(--ink);
+  line-height:1.15; letter-spacing:-.025em; font-variant-numeric:tabular-nums;
+  margin-bottom:5px; }}
+.kv span {{ display:block; font-size:11px; color:var(--ink-3); line-height:1.5; }}
+.kv span:first-of-type {{ color:var(--ink-2); font-weight:600; }}
+
+/* ── 표 ───────────────────────────────────────────────────── */
+.tw {{ overflow-x:auto; margin:0 0 6px; border:1px solid var(--rule);
+  border-radius:4px; -webkit-overflow-scrolling:touch; background:var(--paper); }}
 .tw table {{ min-width:100%; }}
-table {{ width:100%; border-collapse:separate; border-spacing:0; font-size:12px;
-  table-layout:auto; }}
-th {{ background:var(--navy); color:#fff; padding:7px 10px; text-align:left;
-  cursor:pointer; user-select:none; font-weight:600; vertical-align:bottom;
-  line-height:1.3; white-space:normal; word-break:keep-all; min-width:52px;
-  max-width:120px; }}
-/* 스티키는 스크롤 컨테이너 안에서만 씁니다. 페이지 전체 스크롤에 붙이면
-   상단 네비와 겹쳐 글자가 포개집니다. */
+table {{ width:100%; border-collapse:separate; border-spacing:0; font-size:12.5px;
+  table-layout:auto; font-variant-numeric:tabular-nums; }}
+th {{ background:var(--panel); color:var(--navy); padding:9px 12px; text-align:left;
+  cursor:pointer; user-select:none; font-weight:700; font-size:11px;
+  letter-spacing:.03em; vertical-align:bottom; line-height:1.35;
+  white-space:normal; word-break:keep-all; min-width:54px; max-width:130px;
+  border-bottom:1.5px solid var(--navy); }}
 .scroll th {{ position:sticky; top:0; z-index:5; }}
-th:hover {{ background:#2A4A75; }}
-th.sorted::after {{ content:" \\25BE"; }} th.asc::after {{ content:" \\25B4"; }}
+th:hover {{ background:var(--navy-soft); }}
+th.sorted::after {{ content:" \25BE"; color:var(--navy-2); }}
+th.asc::after {{ content:" \25B4"; color:var(--navy-2); }}
 th:first-child, th:nth-child(2) {{ white-space:nowrap; }}
-td {{ border-bottom:1px solid var(--line); padding:7px 10px; white-space:nowrap;
+td {{ border-bottom:1px solid var(--rule); padding:8px 12px; white-space:nowrap;
   vertical-align:top; }}
-td.note {{ white-space:normal; word-break:keep-all; max-width:340px;
-  line-height:1.4; }}
-tbody tr:nth-child(even) td {{ background:var(--panel); }}
-tbody tr:hover td {{ background:#EAF0F8; }}
-td:first-child {{ font-weight:600; }}
+td.note {{ white-space:normal; word-break:keep-all; max-width:360px;
+  line-height:1.45; color:var(--ink-2); font-size:11.5px; font-style:normal; }}
+tbody tr:nth-child(even) td {{ background:#FBFCFD; }}
+tbody tr:hover td {{ background:var(--navy-soft); }}
+tbody tr:last-child td {{ border-bottom:0; }}
+td:first-child {{ font-weight:650; }}
 .num {{ text-align:right; font-variant-numeric:tabular-nums; }}
-.pos {{ color:var(--pos); }} .neg {{ color:var(--neg); }}
-.note {{ color:var(--grey); font-size:11px; font-style:italic; margin:4px 0 14px; }}
-.flag {{ background:#FFF6E0; border-left:4px solid var(--warn); padding:8px 12px;
-  font-size:12px; margin:10px 0; }}
-.grid2 {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(560px,1fr));
-  gap:18px; align-items:start; }}
-.chart {{ width:100%; height:auto; display:block; margin:6px 0 4px; }}
+.pos {{ color:var(--up); font-weight:600; }} .neg {{ color:var(--down); font-weight:600; }}
+
+/* ── 주석 · 출처 ──────────────────────────────────────────── */
+.note {{ color:var(--ink-3); font-size:11.5px; margin:6px 0 16px;
+  max-width:var(--measure); line-height:1.55; font-style:normal; }}
+/* 출처 줄은 각주다. 본문과 같은 크기로 두면 본문처럼 읽힌다. 위에 실선
+   하나를 긋고 한 급 낮춘다 — 근거는 숨기지 않되 앞에 나서지도 않는다. */
+.srcline {{ font-size:11px; color:var(--ink-3); border-top:1px solid var(--rule);
+  padding-top:9px; margin:18px 0 0; line-height:1.65;
+  max-width:none; }}
+.srcline b {{ color:var(--ink-2); font-weight:700; }}
+
+/* ── 표 안의 작은 글 · 인라인 배지 ────────────────────────── */
+/* `.flag` 가 두 가지로 쓰이고 있었다 — 절 단위 경고 상자(div)와 표 칸의
+   배지(span). 같은 규칙이 걸리니 '등급' 칸마다 노란 경고 상자가 통째로
+   들어앉았다. 태그로 갈라서 span 일 때는 배지로 만든다. */
+span.flag {{ display:inline-block; background:var(--panel-2); color:var(--ink-2);
+  border:1px solid var(--rule-2); border-left:1px solid var(--rule-2);
+  padding:1.5px 8px; font-size:10.5px; font-weight:650; letter-spacing:.02em;
+  border-radius:2px; margin:0; white-space:nowrap; }}
+span.flag.ok {{ background:#EDF3EE; border-color:#B9D0BD; color:#2E5E4E; }}
+/* `.small` 은 출처·비고가 들어오는 칸이다. td 의 nowrap 을 물려받아
+   카드 밖으로 넘치고 있었다 — 줄을 접고 폭을 잰다. */
+td.small, .small {{ white-space:normal; word-break:break-word; font-size:11px;
+  color:var(--ink-3); line-height:1.5; max-width:460px; }}
+
+/* ── 빈 절 ───────────────────────────────────────────────── */
+/* 머리글만 있고 행이 없는 표는 '고장'처럼 보인다. 회수계획이 0건인 날은
+   실제로 0건인 것이지 표가 깨진 것이 아니다. 그 둘을 눈으로 갈라 준다. */
+.tw:has(tbody:empty) table {{ display:none; }}
+.tw:has(tbody:empty) {{ border-style:dashed; border-color:var(--rule-2); }}
+.tw:has(tbody:empty)::after {{ content:"해당하는 행이 없습니다."; display:block;
+  padding:22px 16px; text-align:center; color:var(--ink-4); font-size:12px; }}
+
+/* ── 묶음 ─────────────────────────────────────────────────── */
+.grid2 {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(520px,1fr));
+  gap:18px; align-items:start; margin:6px 0; }}
+.card {{ border:1px solid var(--rule); border-radius:4px; padding:16px 18px 14px;
+  background:var(--paper); margin-bottom:16px; }}
+.card h3 {{ margin:0 0 10px; font-size:12px; letter-spacing:.01em;
+  padding-bottom:8px; border-bottom:1px solid var(--rule); }}
+.chart {{ width:100%; height:auto; display:block; margin:4px 0; }}
 .spark {{ width:108px; height:26px; display:block; }}
-.card {{ border:1px solid var(--line); border-radius:5px; padding:14px 16px;
-  background:#fff; margin-bottom:14px; }}
-.card h3 {{ margin-top:0; }}
-.toolbar {{ display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }}
-.toolbar input, .toolbar select {{ font:inherit; padding:5px 8px; border:1px solid var(--line);
-  border-radius:3px; }}
-.toolbar input[type=search] {{ min-width:220px; }}
-.btn {{ font:inherit; padding:5px 10px; border:1px solid var(--navy); background:#fff;
-  color:var(--navy); border-radius:3px; cursor:pointer; }}
-.btn.on {{ background:var(--navy); color:#fff; }}
-.scroll {{ max-height:620px; overflow-y:auto; overflow-x:auto; border:1px solid var(--line); }}
-.count {{ color:var(--grey); font-size:11px; }}
-.bar {{ display:inline-block; height:9px; background:var(--pos); vertical-align:middle;
-  border-radius:1px; }}
-.bar.n {{ background:var(--neg); }}
-details {{ border:1px solid var(--line); border-radius:4px; padding:8px 12px;
+
+/* ── 조작부 ───────────────────────────────────────────────── */
+.toolbar {{ display:flex; flex-wrap:wrap; gap:7px; align-items:center;
+  margin:12px 0 10px; }}
+.toolbar input, .toolbar select {{ font:inherit; font-size:12.5px; padding:6px 10px;
+  border:1px solid var(--rule-2); border-radius:3px; color:var(--ink);
+  background:var(--paper); }}
+.toolbar input:focus, .toolbar select:focus {{ outline:2px solid var(--navy-soft);
+  border-color:var(--navy-2); }}
+.toolbar input[type=search] {{ min-width:230px; }}
+.btn {{ font:inherit; font-size:11.5px; font-weight:600; padding:6px 12px;
+  border:1px solid var(--rule-2); background:var(--paper); color:var(--ink-2);
+  border-radius:3px; cursor:pointer; transition:all .12s; }}
+.btn:hover {{ border-color:var(--navy-2); color:var(--navy); }}
+.btn.on {{ background:var(--navy); color:#fff; border-color:var(--navy); }}
+.scroll {{ max-height:640px; overflow-y:auto; overflow-x:auto;
+  border:1px solid var(--rule); border-radius:4px; }}
+.count {{ color:var(--ink-3); font-size:11.5px; margin-left:4px;
+  font-variant-numeric:tabular-nums; }}
+.bar {{ display:inline-block; height:9px; background:var(--up);
+  vertical-align:middle; border-radius:1px; }}
+.bar.n {{ background:var(--down); }}
+details {{ border:1px solid var(--rule); border-radius:4px; padding:10px 15px;
   margin-bottom:12px; background:var(--panel); }}
-details[open] {{ background:#fff; }}
-summary {{ cursor:pointer; font-weight:600; color:var(--navy); font-size:12px; }}
-.pf {{ background:#FFFBEA; }}
-.sev1 {{ color:#8C2332; font-weight:bold; }} .sev2 {{ color:#8A6A1F; }}
-.flow {{ background:var(--panel); border-left:4px solid var(--navy);
-  padding:9px 14px; font-size:12px; margin:14px 0 4px; border-radius:0 4px 4px 0; }}
-.flow b {{ color:var(--navy); }}
-.lead {{ color:var(--grey); font-size:12px; margin:-6px 0 14px; line-height:1.6; }}
-.conf {{ background:#8C2332; color:#fff; padding:10px 14px; border-radius:4px;
-  font-weight:bold; font-size:13px; margin-bottom:14px; }}
-.two {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(270px,1fr));
-  gap:12px 18px; margin:10px 0; }}
-.two ul {{ margin:5px 0 0; padding-left:15px; font-size:11.5px; line-height:1.6; }}
-.two li {{ margin-bottom:4px; word-break:keep-all; }}
-.two > div > b {{ font-size:11px; color:var(--navy); letter-spacing:-.2px; }}
-ul.p li {{ color:#1F5FA8; }} ul.c li {{ color:#B02A37; }}
-.conf span {{ display:block; font-weight:normal; font-size:11px; opacity:.9;
-  margin-top:4px; }}
-.tag {{ display:inline-block; background:var(--navy); color:#fff; border-radius:3px;
-  padding:1px 6px; font-size:10px; margin-right:4px; }}
-.tag.risk {{ background:#8C2332; }} .tag.dilution {{ background:#8A6A1F; }}
+details[open] {{ background:var(--paper); padding-bottom:14px; }}
+summary {{ cursor:pointer; font-weight:700; color:var(--navy); font-size:12px;
+  letter-spacing:-.01em; }}
+summary::marker {{ color:var(--ink-4); }}
+.pf {{ background:#FFFCF2 !important; }}
+.sev1 {{ color:var(--conf); font-weight:700; }} .sev2 {{ color:var(--warn); }}
+
+/* ── 두 갈래 목록 ─────────────────────────────────────────── */
+.two {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr));
+  gap:14px 22px; margin:12px 0; }}
+.two ul {{ margin:6px 0 0; padding-left:16px; font-size:11.5px; line-height:1.65; }}
+.two li {{ margin-bottom:5px; word-break:keep-all; color:var(--ink-2); }}
+.two > div > b {{ font-size:10.5px; color:var(--ink-4); letter-spacing:.08em;
+  text-transform:uppercase; font-weight:700; }}
+ul.p li {{ color:var(--down); }} ul.c li {{ color:var(--up); }}
+
+/* ── 꼬리표 ───────────────────────────────────────────────── */
+.tag {{ display:inline-block; background:var(--navy); color:#fff; border-radius:2px;
+  padding:1.5px 7px; font-size:10px; font-weight:650; letter-spacing:.02em;
+  margin-right:4px; }}
+.tag.risk {{ background:var(--conf); }} .tag.dilution {{ background:var(--warn); }}
 .tag.corporate_action {{ background:#2E5E4E; }}
-@media print {{ body {{ padding:0; font-size:9pt; }} th {{ position:static; }} }}
+
+/* ── 인쇄 ─────────────────────────────────────────────────── */
+/* 회의에는 종이로 들어간다. 표가 장 사이에서 잘리면 그 행은 못 읽는다. */
+@page {{ size:A4; margin:14mm 12mm 16mm; }}
+@media print {{
+  body {{ background:#fff; font-size:8.6pt; }}
+  .wrap {{ max-width:none; padding:0; box-shadow:none; }}
+  nav, .toolbar {{ display:none; }}
+  .scroll {{ max-height:none; overflow:visible; }}
+  th {{ position:static; }}
+  thead {{ display:table-header-group; }}
+  tr, .card, .kv>div {{ break-inside:avoid; page-break-inside:avoid; }}
+  h2 {{ break-after:avoid; page-break-after:avoid; margin-top:22px; }}
+  details {{ background:#fff; }} details[open] summary {{ margin-bottom:6px; }}
+  a {{ color:inherit; text-decoration:none; }}
+}}
+@media (max-width:820px) {{
+  .wrap {{ padding:0 18px 48px; }}
+  .mast-top {{ flex-direction:column; }} .seal {{ text-align:left; }}
+  h1 {{ font-size:25px; }} .grid2 {{ grid-template-columns:1fr; }}
+}}
 </style></head><body><div class="wrap">
-<div class="conf">대외비 · 사내 검토용 · 외부 배포 및 재배포 금지<br>
-<span>본 문서는 투자권유 또는 투자자문 자료가 아닙니다. 포트폴리오 보유사 실명과
-회수 계획이 포함되어 있으므로 열람 범위를 제한하십시오.</span></div>
+<header class="mast">
+ <div class="mast-top">
+  <div>
+   <div class="eyebrow">{org} · Investment Committee</div>
+   <h1>포트폴리오 회수 판단 리포트</h1>
+   <p class="standfirst">상장 포트폴리오사의 회수 시점을 판단하기 위한 측정 자료입니다.
+    결론은 담겨 있지 않습니다 — 판단은 회의에서 합니다.</p>
+  </div>
+  <div class="seal">
+   <b>대외비 · CONFIDENTIAL</b>
+   <span>사내 검토용. 외부 배포 및 재배포 금지. 투자권유 또는 투자자문 자료가
+    아닙니다. 보유사 실명과 회수 계획이 포함되어 있습니다.</span>
+  </div>
+ </div>
+ <dl class="meta">
+  <div><dt>기준일</dt><dd>{as_of}</dd></div>
+  <div><dt>시장</dt><dd>{market}</dd></div>
+  <div><dt>대상 종목</dt><dd>{n_stocks:,}</dd></div>
+  <div><dt>관측 기간</dt><dd>{n_days}일</dd></div>
+  <div><dt>생성 시각</dt><dd>{gen_at}</dd></div>
+ </dl>
+</header>
 <nav>{nav_html}</nav>
-<h1>포트폴리오 회수 판단 리포트</h1>
-<div class='sub'>{org} · 상장 포트폴리오사 회수 시점 판단용</div>
-<div class="sub">기준일 {as_of} · {market} 전종목 {n_stocks:,}개 · 관측 {n_days}일 · 생성 {gen_at}</div>
 {watermark_html}
 <div class="flow">읽는 순서 —
  <b>무엇을 결정해야 하는가</b> → <b>팔 수 있는가</b> → <b>어떻게 팔 것인가</b> →
@@ -3339,17 +3513,14 @@ def render_quant(ctx: dict, refresh_sec: int = 0) -> Path:
         cards = "".join(
             f"<div><b>{v['fmt'](v['value'])}</b>"
             f"<span>{v['label']}<br>관측기간 {v['pctile']*100:.0f}분위"
-            + (f" · 20일 {v['fmt'](v['chg20'])}"
-               if v["chg20"] is not None and abs(v["chg20"]) > 1e9
-               else (f" · 20일 {v['chg20']:+,.2f}" if v["chg20"] is not None else ""))
+            + (f" · 20일 {v['dfmt'](v['chg20'])}"
+               if v.get("chg20") is not None else "")
             + "</span></div>" for v in reg.values())
         rows_r = ["<tr><td>%s</td><td class='num'>%s</td><td class='num'>%s</td>"
                   "<td class='num'>%s</td><td class='num'>%s ~ %s</td>"
                   "<td class='note'>%s</td></tr>"
                   % (v["label"], v["fmt"](v["value"]), f"{v['pctile']*100:.0f}%",
-                     (v["fmt"](v["chg20"]).replace("조", "조p")
-                      if v["chg20"] is not None and abs(v["chg20"]) > 1e9
-                      else (f"{v['chg20']:+,.3f}" if v["chg20"] is not None else "-")),
+                     (v["dfmt"](v["chg20"]) if v.get("chg20") is not None else "-"),
                      v["fmt"](v["lo"]), v["fmt"](v["hi"]), v["what"])
                   for v in reg.values()]
         regime_block = (
@@ -3479,7 +3650,10 @@ def render_quant(ctx: dict, refresh_sec: int = 0) -> Path:
 
     # 종목별 관측값 — 판정하지 않습니다
     if ex is None or ex.empty:
-        verdict_block = ("<div class='flag'>상장 포트폴리오사가 원장에 없습니다.</div>")
+        # 같은 사유를 두 번 적지 않습니다. 바로 아래 exit_block 이 같은 말을
+        # 하면서 '무엇을 해야 하는지'(watchlist.csv 확인)까지 붙입니다.
+        # 같은 경고가 연달아 두 번 뜨면 읽는 사람은 둘 다 안 읽습니다.
+        verdict_block = ""
         exit_detail_block = ""
     else:
         obs = {c: exit_observations(r) for c, r in ex.iterrows()}
@@ -4197,7 +4371,7 @@ def regime(fr: dict, mp: pd.DataFrame) -> dict:
     turn_ma = turn.rolling(20).mean()
     out = {}
 
-    def add(key, label, series, fmt, what):
+    def add(key, label, series, fmt, what, dfmt=None):
         if series is None or series.dropna().empty:
             return
         s = series.dropna()
@@ -4207,21 +4381,31 @@ def regime(fr: dict, mp: pd.DataFrame) -> dict:
             return
         d20 = float(cur - s.iloc[-min(21, len(s))]) if len(s) > 21 else None
         out[key] = {"label": label, "value": cur, "pctile": p, "fmt": fmt,
+                    "dfmt": dfmt or (lambda v: f"{v:+,.2f}"),
                     "chg20": d20, "what": what,
                     "lo": float(s.min()), "hi": float(s.max())}
 
+    # 변화량에는 **그 지표의 단위**가 따로 붙습니다. 이걸 값의 크기로 고르면
+    # 안 됩니다 — 예전에는 |변화| > 1e9 이면 조 단위, 아니면 생 숫자였습니다.
+    # 그래서 같은 칸에 '-0.30조'와 '-413,867,390.960'이 나란히 찍혔습니다.
+    # 단위가 행마다 달라지는 표는 읽는 사람이 눈치채기 전까지 조용히 틀립니다.
+    # 수준은 조 단위가 맞지만 하루치 변화는 억 단위여야 자릿수가 보입니다.
     add("liquidity", "시장 거래대금 (20일평균)", turn_ma,
-        lambda v: f"{v / 1e12:,.2f}조", "코스닥 전 종목 거래대금 합계의 20일 이동평균")
+        lambda v: f"{v / 1e12:,.2f}조", "코스닥 전 종목 거래대금 합계의 20일 이동평균",
+        dfmt=lambda v: f"{v / 1e8:+,.0f}억")
     if "vkospi" in mp:
         add("vol", "변동성지수 (VKOSPI 선물)", mp["vkospi"], lambda v: f"{v:,.1f}",
-            "최근월 선물 종가")
+            "최근월 선물 종가", dfmt=lambda v: f"{v:+,.1f}")
     if "rate_3y" in mp:
+        # 금리의 변화는 %가 아니라 %p 입니다. 4.0% 가 4.2% 가 된 것을
+        # '+0.2%' 라고 적으면 0.2% 상대변화로 읽힙니다 — 열 배 차이입니다.
         add("rate", "국고채 3년", mp["rate_3y"], lambda v: f"{v:.3f}%",
-            "국채전문유통시장 지표물 종가수익률")
+            "국채전문유통시장 지표물 종가수익률", dfmt=lambda v: f"{v:+.3f}%p")
     r = fr["close"].pct_change()
     adv_ratio = (r > 0).sum(axis=1) / r.notna().sum(axis=1).replace(0, np.nan)
     add("breadth", "상승종목 비율 (20일평균)", adv_ratio.rolling(20).mean(),
-        lambda v: f"{v * 100:,.1f}%", "전일 대비 상승한 종목의 비율")
+        lambda v: f"{v * 100:,.1f}%", "전일 대비 상승한 종목의 비율",
+        dfmt=lambda v: f"{v * 100:+,.1f}%p")
     return out
 
 
@@ -6939,8 +7123,13 @@ def _exit_plan() -> pd.DataFrame | None:
         return None
     if df.empty or "name" not in df.columns:
         return None
-    # resolved 열이 있으면 그것으로 잇습니다. 계획서는 약칭(카나프)을 쓰고
-    # 등록부는 정식명(카나프테라퓨틱스)을 쓰기 때문입니다.
+    # resolved 열이 있으면 그것으로 잇습니다. 계획서는 약칭을, 등록부는
+    # 정식명을 쓰는 경우가 있어 이름만으로는 안 이어집니다.
+    #
+    # **여기에 실제 회사 이름을 예로 들지 마십시오.** 예전에는 이 자리에
+    # 약칭과 정식명이 실명으로 적혀 있었습니다 — 규칙 5 위반이고,
+    # watchlist.csv 가 없는 컨테이너에서는 docs/audit.py 의 실명 검사가
+    # 통째로 건너뛰어져서 오래 남아 있었습니다. 규칙은 이름 없이 설명됩니다.
     key = df["resolved"] if "resolved" in df.columns else df["name"]
     df["_k"] = key.fillna(df["name"]).str.replace(r"\s+", "", regex=True)
     if "dart_status" not in df.columns:
@@ -6949,7 +7138,11 @@ def _exit_plan() -> pd.DataFrame | None:
 
 
 def match_plan(plan: pd.DataFrame, names: dict) -> dict:
-    """계획의 약칭(카나프)과 실제 법인명(카나프테라퓨틱스)을 잇습니다."""
+    """계획서의 약칭과 등록부의 법인명을 잇습니다.
+
+    둘은 같은 회사인데 글자가 다릅니다. 계획서는 줄여 쓰고 등록부는
+    정식 상호를 씁니다. 공백을 지우고 한쪽이 다른 쪽에 들어가는지로
+    잇습니다 — 실명을 예로 들어 설명하지 않습니다 (규칙 5)."""
     if plan is None or plan.empty:
         return {}
     out = {}
