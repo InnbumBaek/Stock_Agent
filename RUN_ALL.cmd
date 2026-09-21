@@ -103,13 +103,10 @@ if /I "%MODE%"=="papers" goto :auto_papers
 if /I "%MODE%"=="cycle" goto :auto_cycle
 
 call :say ""
-call :say "  ==============================================="
-call :say "   Stock-Agent 전체 실행   (기록: logs\%STAMP%-runall.log)"
-call :say "  ==============================================="
-call :say ""
+call :say "  Stock-Agent 전체 실행   (기록: logs\%STAMP%-runall.log)"
 
-rem ---------------------------------------------------------- 0. 환경
-call :stage "0/4" "환경 점검"
+rem ---------------------------------------------------------- 1/5 환경
+call :stage "1/5" "환경 · 키 · 감시 종목"
 %PY% --version >nul 2>&1
 if errorlevel 1 (
   call :fail "파이썬을 찾지 못했습니다." "python.org 에서 설치(Add to PATH 켜기) 후 창을 새로 여십시오."
@@ -120,7 +117,6 @@ if errorlevel 1 (
   call :fail "파이썬 패키지 설치 실패" "logs 폴더의 오늘 기록을 보십시오."
   goto :end
 )
-call :ok "파이썬 · 패키지"
 
 rem -- 키는 저장소 바깥에 둔다.
 rem
@@ -135,24 +131,30 @@ if defined STOCK_AGENT_KEYS set "KEYDIR=%STOCK_AGENT_KEYS%"
 call :keys
 call :data
 
-rem ---------------------------------------------------------- 1. API
-call :stage "1/4" "API 진단"
+rem ---------------------------------------------------------- 2/5 API
+call :stage "2/5" "API 진단"
 pushd stock-monitor
 %PY% ki_monitor.py diagnose > "%TEMP%\sa_diag.txt" 2>&1
 set DIAG=%ERRORLEVEL%
 popd
-type "%TEMP%\sa_diag.txt"
+rem  진단은 다섯 줄을 전부 찍었다. 다 정상인 날에도 다섯 줄이라 매일 같고,
+rem  그래서 막힌 줄이 그 사이에 묻힌다. 화면에는 **막힌 줄(X)만** 올린다 -
+rem  다 정상이면 한 줄도 안 나온다. 기록에는 언제나 전부 남는다.
+rem
+rem  건너뛴 줄(-)은 안 올린다. 그건 "키가 없어 안 부름"이라 사건이 아니라
+rem  설정이고, 매일 같은 세 줄이 되어 정작 X 를 가린다. 그 결과는 리포트의
+rem  해당 절이 사유와 함께 비는 것으로 나온다 (규칙 3).
 type "%TEMP%\sa_diag.txt" >> "%LOG%" 2>&1
 if not "%DIAG%"=="0" (
+  type "%TEMP%\sa_diag.txt"
   call :fail "필수 API 를 부르지 못했습니다." "위 진단을 보십시오. 전부 막혀 있으면 사내 방화벽입니다 - docs\NETWORK.md 를 전산팀에 주십시오."
   goto :end
 )
-call :ok "필수 API 정상"
+findstr /C:"  X  " "%TEMP%\sa_diag.txt"
 
-rem ---------------------------------------------------------- 2. 원장
-call :stage "2/4" "원장"
+rem ---------------------------------------------------------- 3/5 원장
+call :stage "3/5" "원장"
 if exist "stock-monitor\ki.sqlite" (
-  call :say "     이미 있습니다. 밀린 영업일을 채우고 하루치를 갱신합니다."
   rem  daily 는 하루치만 넣는다. 며칠 걸렀다가 돌리면 그 사이가 빈 채로 남고,
   rem  몇 주 묵은 종가가 최신 종가 행세를 한다. 화면에는 "원장 갱신" 만 찍혀서
   rem  아무도 모른다 — 그래서 catchup 이 잰 것을 화면에 그대로 띄운다.
@@ -162,11 +164,8 @@ if exist "stock-monitor\ki.sqlite" (
   popd
   type "%TEMP%\sa_cu.txt"
   type "%TEMP%\sa_cu.txt" >> "%LOG%" 2>&1
-  call :ok "원장 갱신"
 ) else (
-  call :say "     처음입니다. 최초 적재를 합니다 - 약 40분 걸립니다."
-  call :say "     창을 닫지 마십시오. 한 번만 하면 됩니다."
-  call :say ""
+  call :say "     처음입니다 - 최초 적재에 약 40분. 창을 닫지 마십시오 (한 번만 합니다)."
   pushd stock-monitor
   %PY% ki_monitor.py ingest --from 20250101 --universe KOSDAQ >> "%LOG%" 2>&1
   if errorlevel 1 goto :ingest_failed
@@ -175,22 +174,20 @@ if exist "stock-monitor\ki.sqlite" (
   %PY% ki_monitor.py fundamentals --market KOSDAQ >> "%LOG%" 2>&1
   %PY% ki_monitor.py fundamentals --market KOSPI >> "%LOG%" 2>&1
   popd
-  call :ok "원장 생성"
 )
 
-rem ---------------------------------------------------------- 3. 논문
+rem ---------------------------------------------------------- 4/5 논문
 rem  하루 한 편까지. 수확은 공개 API 라 비용이 없고, 채택은 발행 정보를
 rem  Crossref 로 다시 대조한 것만 넣는다. 대조에 실패하면 넣지 않는다.
-call :stage "3/4" "논문 수확 · 채택"
+call :stage "4/5" "논문 수확 · 채택"
 pushd stock-monitor
 %PY% ..\docs\fetch_papers.py --harvest-years 2 --max-per-year 25 >> "%LOG%" 2>&1
 if errorlevel 1 call :say "     [알림] 수확 실패 - 네트워크나 논문 API 쪽 문제입니다."
 %PY% ..\docs\fetch_papers.py --adopt --max-adopt 1 >> "%LOG%" 2>&1
 popd
-call :ok "논문 고리"
 
-rem ---------------------------------------------------------- 4. 회의 자료
-call :stage "4/4" "회의 자료"
+rem ---------------------------------------------------------- 5/5 회의 자료
+call :stage "5/5" "회의 자료"
 pushd stock-monitor
 %PY% ki_monitor.py report --market %MARKET% >> "%LOG%" 2>&1
 set RPRC=%ERRORLEVEL%
@@ -199,19 +196,14 @@ if not "%RPRC%"=="0" (
   call :fail "리포트를 만들지 못했습니다." "기록을 보십시오: %LOG%"
   goto :end
 )
-call :ok "회의 자료"
 
 for /f "delims=" %%f in ('dir /b /o-d "stock-monitor\out\KI_exit_*.html" 2^>nul') do (
   call :say ""
-  call :say "     stock-monitor\out\%%f"
+  call :say "  끝났습니다 - stock-monitor\out\%%f"
   if /I not "%MODE%"=="auto" start "" "stock-monitor\out\%%f"
   goto :done
 )
 :done
-call :say ""
-call :say "  ==============================================="
-call :say "   끝났습니다. 회의 자료는 stock-monitor\out\ 에 있습니다."
-call :say "  ==============================================="
 goto :end
 
 :ingest_failed
@@ -223,27 +215,23 @@ rem ==========================================================
 rem  스케줄러 전용 - 평일 08:50  리포트만 만든다
 rem ==========================================================
 :auto_morning
-call :say "============================================"
-call :say " %DATE% %TIME%  -  아침 리포트"
-call :say "============================================"
+call :say "%DATE% %TIME%  아침 리포트 시작"
 pushd stock-monitor
 %PY% ki_monitor.py report --market %MARKET% >> "%LOG%" 2>&1
 popd
-call :say "완료"
+call :say "%DATE% %TIME%  끝"
 exit /b 0
 
 rem ==========================================================
 rem  스케줄러 전용 - 평일 16:10  장 마감 적재
 rem ==========================================================
 :auto_close
-call :say "============================================"
-call :say " %DATE% %TIME%  -  장 마감 적재"
-call :say "============================================"
+call :say "%DATE% %TIME%  장 마감 적재 시작"
 pushd stock-monitor
 %PY% ki_monitor.py catchup --market %MARKET% >> "%LOG%" 2>&1
 %PY% ki_monitor.py daily --market %MARKET% >> "%LOG%" 2>&1
 popd
-call :say "완료"
+call :say "%DATE% %TIME%  끝"
 exit /b 0
 
 rem ==========================================================
@@ -253,14 +241,12 @@ rem  수확은 공개 API 라 비용이 없습니다. 채택은 발행 정보를
 rem  다시 대조한 것만, 하루 한 편까지. 대조에 실패하면 넣지 않습니다.
 rem ==========================================================
 :auto_papers
-call :say "============================================"
-call :say " %DATE% %TIME%  -  논문 수확 · 채택"
-call :say "============================================"
+call :say "%DATE% %TIME%  논문 수확 · 채택 시작"
 pushd stock-monitor
 %PY% ..\docs\fetch_papers.py --harvest-years 2 --max-per-year 25 >> "%LOG%" 2>&1
 %PY% ..\docs\fetch_papers.py --adopt --max-adopt 1 >> "%LOG%" 2>&1
 popd
-call :say "완료"
+call :say "%DATE% %TIME%  끝"
 exit /b 0
 
 rem ==========================================================
@@ -274,12 +260,10 @@ rem  네트워크도 키도 쓰지 않는다 - 이미 받아 둔 원장만 읽�
 rem  원장이 없으면 사유를 로그에 적고 그대로 끝난다.
 rem ==========================================================
 :auto_cycle
-call :say "============================================"
-call :say " %DATE% %TIME%  -  주간 논문 재현 사이클"
-call :say "============================================"
+call :say "%DATE% %TIME%  주간 논문 재현 사이클 시작"
 %PY% agents\cycle.py --run >> "%LOG%" 2>&1
 if errorlevel 1 call :say "  사이클이 끝까지 돌지 못했습니다. 로그를 보십시오."
-call :say "완료"
+call :say "%DATE% %TIME%  끝"
 exit /b 0
 
 rem ---------------------------------------------------------- 유틸
@@ -298,13 +282,28 @@ if exist "stock-monitor\.env" (
     call :say "         cd stock-monitor ^&^& python ki_monitor.py migrate-keys"
   )
 )
+rem  고르는 무늬는 **ASCII 로만** 쓴다. 이 .cmd 는 UTF-8 이고 파이썬이 파일로
+rem  내보낸 글자는 그 컴퓨터의 로캘 인코딩이다. 한글 낱말로 findstr 을 걸면
+rem  두 인코딩이 다른 컴퓨터에서 한 줄도 안 맞아 조용히 사라진다.
+rem  "들여쓴 줄"(^  )은 개수 줄만 고르면서 한글을 한 자도 안 쓴다.
+rem  import-keys 는 잘 된 날에도 "이미 키 파일이 있습니다: <긴 경로>" 를 찍었다.
+rem  매일 같은 두 줄이라 아무도 안 읽는다. 기록에는 전부 남기고, 화면에는
+rem  **개수 줄만** 올린다 - 키가 6개에서 2개로 줄어든 날은 보여야 한다.
+rem  실패하면 그때는 통째로 띄운다. errorlevel 은 type 이 덮어쓰므로 먼저 챙긴다.
 pushd stock-monitor
-%PY% ki_monitor.py import-keys
-if not errorlevel 1 goto :keys_ok
-call :say ""
+%PY% ki_monitor.py import-keys > "%TEMP%\sa_keys.txt" 2>&1
+set KRC=%ERRORLEVEL%
+type "%TEMP%\sa_keys.txt" >> "%LOG%" 2>&1
+if not "%KRC%"=="0" goto :keys_deep
+findstr /R /C:"^  " "%TEMP%\sa_keys.txt"
+goto :keys_ok
+:keys_deep
 call :say "     흔한 자리에는 없습니다 - 조금 더 넓게 찾아봅니다 (최대 1분)"
-%PY% ki_monitor.py import-keys --deep
-if not errorlevel 1 goto :keys_ok
+%PY% ki_monitor.py import-keys --deep > "%TEMP%\sa_keys.txt" 2>&1
+set KRC=%ERRORLEVEL%
+type "%TEMP%\sa_keys.txt"
+type "%TEMP%\sa_keys.txt" >> "%LOG%" 2>&1
+if "%KRC%"=="0" goto :keys_ok
 rem  자동 실행(스케줄러)에는 답할 사람이 없다. 묻지 않고 넘어간다.
 if /I "%MODE%"=="auto" goto :keys_none
 if /I "%MODE%"=="morning" goto :keys_none
@@ -333,7 +332,6 @@ call :say "       cd stock-monitor ^&^& python ki_monitor.py import-keys \"경�
 exit /b 0
 :keys_ok
 popd
-call :ok "키"
 exit /b 0
 
 
@@ -344,11 +342,19 @@ rem  종목이 포트폴리오사로 안 맞춰지는데, 화면에는 "그대�
 rem  지나가서 아무도 모른다. 그래서 키와 같은 사다리로 옛 폴더에서 가져온다.
 rem  이미 있으면 아무것도 하지 않는다 (손으로 고친 것을 덮어쓰지 않는다).
 pushd stock-monitor
-%PY% ki_monitor.py import-data
-if not errorlevel 1 goto :data_ok
+%PY% ki_monitor.py import-data > "%TEMP%\sa_data.txt" 2>&1
+set DRC=%ERRORLEVEL%
+type "%TEMP%\sa_data.txt" >> "%LOG%" 2>&1
+if not "%DRC%"=="0" goto :data_deep
+findstr /R /C:"^  " "%TEMP%\sa_data.txt"
+goto :data_ok
+:data_deep
 call :say "     감시 종목 파일을 찾습니다 - 조금 더 넓게 봅니다 (최대 1분)"
-%PY% ki_monitor.py import-data --deep
-if not errorlevel 1 goto :data_ok
+%PY% ki_monitor.py import-data --deep > "%TEMP%\sa_data.txt" 2>&1
+set DRC=%ERRORLEVEL%
+type "%TEMP%\sa_data.txt"
+type "%TEMP%\sa_data.txt" >> "%LOG%" 2>&1
+if "%DRC%"=="0" goto :data_ok
 popd
 call :say ""
 call :say "     감시 종목 파일(watchlist.csv)이 없습니다."
@@ -358,7 +364,6 @@ call :say "     처음이시면 stock-monitor\watchlist.sample.csv 를 복사해
 exit /b 0
 :data_ok
 popd
-call :ok "감시 종목 자료"
 exit /b 0
 
 
@@ -371,11 +376,6 @@ exit /b 0
 :stage
 call :say ""
 call :say "  [%~1] %~2"
-exit /b 0
-
-
-:ok
-call :say "      O  %~1"
 exit /b 0
 
 

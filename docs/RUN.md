@@ -36,10 +36,14 @@ RUN_ALL.cmd auto     묻지 않고 끝까지 — 스케줄러용
 
 - **다시 돌려도 안전합니다.** 원장이 이미 있으면 40분짜리 최초 적재를 다시 하지
   않고 하루치만 갱신합니다. 중간에 죽어도 다시 돌리면 이어서 갑니다.
-  `demo`·`noai` 로 건너뛸 수 있고, `claude` CLI 가 없으면 자동으로 데모가 됩니다.
+- **잘 된 날은 조용합니다.** 단계 이름만 한 줄씩 지나갑니다. 화면에 올라오는
+  것은 **막힌 것과 달라진 것**뿐입니다 — 막힌 API, 원장이 며칠 뒤처졌는지,
+  키·감시 종목의 개수. 매번 같은 말은 `logs\` 의 그날 기록에만 남습니다.
+  막히면 그 자리에서 진단을 통째로 띄우고 멈춥니다.
 
-> 매주 자동으로 도는 일정(금요일 분석 → 월요일 리포트)은 `SCHEDULE.cmd` 가 등록합니다.
-> 등록되는 것도 결국 `RUN_ALL.cmd morning` · `RUN_ALL.cmd close` 로, 같은 파일입니다.
+> 평일 자동 실행(07:30 논문 · 08:50 리포트 · 16:10 마감 적재, 월요일 07:40
+> 논문 재현 사이클)은 `SCHEDULE.cmd` 가 등록합니다. 등록되는 것도 결국
+> `RUN_ALL.cmd papers` · `morning` · `close` · `cycle` 로, 같은 파일입니다.
 
 아래는 단계별로 하고 싶을 때의 안내입니다.
 
@@ -367,7 +371,7 @@ python ki_monitor.py facts --code 000660 --with-disclosures --indent 2
 | 시세가 며칠 전 값 같다 | 원장이 밀린 것입니다. `python ki_monitor.py catchup --market KOSDAQ` — 리포트가 보는 값은 전부 원장의 마지막 종가입니다 |
 | API 가 전부 안 됨 | `python ki_monitor.py diagnose` → 사내망 차단이면 `NETWORK.md` |
 | `claude` 를 못 찾음 | 실전 런에만 필요합니다. 설치 전에는 `--demo` 로 배선만 확인하십시오 |
-| `claude` 로그인을 매번 묻는다 | 장기 토큰을 만들면 다시 묻지 않습니다. `claude setup-token` → 나온 토큰을 `%USERPROFILE%\Stock-Agent-keys\claude-token.txt` 에 한 줄로. RUN_ALL 이 그것을 `CLAUDE_CODE_OAUTH_TOKEN` 으로 넘깁니다 (자동 실행도 이때 돕니다). RUN_ALL 이 물어볼 때 [2] 를 고르면 이 과정을 대신 해 줍니다 |
+| `claude` 로그인을 매번 묻는다 | 장기 토큰을 만들면 다시 묻지 않습니다. `claude setup-token` → 나온 토큰을 `%USERPROFILE%\Stock-Agent-keys\claude-token.txt` 에 한 줄로. 이 파일은 키와 같은 자리(저장소 밖)에 둡니다 |
 | `Yahoo chart HTTP 403` 인데 계속 진행됨 | 정상입니다. 원장의 KRX 공식 일봉으로 대체된 것이고 시세 줄에 그 사실이 표시됩니다 |
 | FLOW 가 "실행 시뮬레이션 산출 실패" | 관측기간이 짧습니다(85영업일 이상 필요). `ingest --from` 을 앞당기십시오 |
 | 리포트에 종목이 코드로 표시 | 원장에 그 종목 시세가 없습니다. `ingest --universe` 로 해당 시장을 적재하십시오 |

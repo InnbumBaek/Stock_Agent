@@ -170,7 +170,20 @@ print("\n[2-g] RUN_ALL 이 키를 스스로 구해 오는가")
 # 흔한 자리 → 넓게 훑기 → 물어보기. 자동 실행에는 답할 사람이 없으므로
 # 묻는 칸은 건너뛴다.
 _ra3 = (ROOT / "RUN_ALL.cmd").read_bytes().decode("utf-8")
-_i_shallow = _ra3.find("ki_monitor.py import-keys\r")
+# 얕은 탐색 줄을 **줄 끝**으로 찾았더니, 그 줄 끝에 리다이렉션을 붙이는
+# 순간 검사가 "흔한 자리를 안 본다" 로 뒤집혔다. 실제로는 그대로 보고 있었다.
+# 찾을 것은 줄의 생김새가 아니라 `--deep` 도 경로 인자도 없는 첫 호출이다.
+_i_shallow = -1
+for _ln in _ra3.split("\r\n"):
+    _t = _ln.strip()
+    if _t.lower().startswith("rem"):
+        continue
+    # 실제로 부르는 줄만 본다. 안내 문구에도 같은 명령이 적혀 있어서,
+    # 낱말로만 찾으면 얕은 탐색을 통째로 지워도 그 안내 줄이 대신 걸린다.
+    if _t.startswith("%PY% ki_monitor.py import-keys") and "--deep" not in _t \
+            and "%KEYSRC%" not in _t:
+        _i_shallow = _ra3.find(_ln)
+        break
 _i_deep = _ra3.find("import-keys --deep")
 _i_ask = _ra3.find("set /p \"KEYSRC=")
 (ok if _i_shallow > 0 else bad)("흔한 자리를 먼저 본다")
